@@ -1,0 +1,23 @@
+[theme]
+base = "light"
+primaryColor = "#0f5b4f"
+backgroundColor = "#f4f5f3"
+secondaryBackgroundColor = "#ffffff"
+textColor = "#1b2a26"
+linkColor = "#0f5b4f"
+borderColor = "#e3e5e1"
+baseRadius = "12px"
+font = "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+headingFont = "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+
+[theme.dark]
+primaryColor = "#1fb08a"
+backgroundColor = "#0f1412"
+secondaryBackgroundColor = "#181e1b"
+textColor = "#e8efe9"
+linkColor = "#1fb08a"
+borderColor = "#2a312d"
+baseRadius = "12px"
+
+[server]
+headless = true
