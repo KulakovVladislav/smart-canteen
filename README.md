@@ -9,10 +9,7 @@ Smart Canteen is a school canteen optimization project that uses student complai
 - `docs/` — documentation
 - `tests/` — tests
 
-## Roles
 
-- IT: Vlad
-- Economics: friend
 
 ## Run the script
 
