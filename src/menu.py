@@ -10,6 +10,8 @@ MENU = [
         "dish_b": "Овощные котлеты с пюре",
         "complaint_cluster": "В каше комки, порция большая",
         "cost_assumption_note": "не указано",
+        "dish_a_vegetarian": False,
+        "dish_b_vegetarian": True,
     },
     {
         "day": "Вторник",
@@ -17,6 +19,8 @@ MENU = [
         "dish_b": "Овощной суп + макароны с сыром",
         "complaint_cluster": "В макаронах мало сыра",
         "cost_assumption_note": "не указано",
+        "dish_a_vegetarian": False,
+        "dish_b_vegetarian": True,
     },
     {
         "day": "Среда",
@@ -24,6 +28,8 @@ MENU = [
         "dish_b": "Овощные биточки + рис с овощами",
         "complaint_cluster": "Рыба холодная, с костями, рис сухой",
         "cost_assumption_note": "не указано",
+        "dish_a_vegetarian": False,
+        "dish_b_vegetarian": True,
     },
     {
         "day": "Четверг",
@@ -31,6 +37,8 @@ MENU = [
         "dish_b": "Гороховый суп на овощном бульоне + гречка с тушёными овощами",
         "complaint_cluster": "Вегетарианцам нечего есть",
         "cost_assumption_note": "не указано",
+        "dish_a_vegetarian": False,
+        "dish_b_vegetarian": True,
     },
     {
         "day": "Пятница",
@@ -38,6 +46,8 @@ MENU = [
         "dish_b": "Школьная пицца без мяса",
         "complaint_cluster": "Не успевают из-за очереди и короткой перемены",
         "cost_assumption_note": "не указано",
+        "dish_a_vegetarian": True,
+        "dish_b_vegetarian": True,
     },
 ]
 
@@ -199,10 +209,44 @@ def check_budget(costs=None, limit=COST_CEILING, menu=None):
     }
 
 
-# Aliases
-validate_budget = check_budget
-budget_check = check_budget
-budget_status = check_budget
+DAY_NAMES = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница"]
+
+
+def day_for_date(value):
+    """Return Russian weekday name for a date (Mon-Fri), or None for weekend."""
+    if hasattr(value, "weekday"):
+        wd = value.weekday()
+    else:
+        import datetime
+        try:
+            d = datetime.date.fromisoformat(str(value))
+        except ValueError:
+            return None
+        wd = d.weekday()
+    if 0 <= wd <= 4:
+        return DAY_NAMES[wd]
+    return None
+
+
+def is_vegetarian_dish(day, dish):
+    for item in MENU:
+        if item["day"] == day:
+            if dish == "A":
+                return bool(item.get("dish_a_vegetarian", False))
+            if dish == "B":
+                return bool(item.get("dish_b_vegetarian", False))
+    return False
+
+
+def vegetarian_letters_for_day(day):
+    result = []
+    for item in MENU:
+        if item["day"] == day:
+            if item.get("dish_a_vegetarian"):
+                result.append("A")
+            if item.get("dish_b_vegetarian"):
+                result.append("B")
+    return result
 
 # Backwards/alternative names for compatibility with hidden tests.
 validate = validate_menu

@@ -21,8 +21,15 @@ python app.py budget-check # budget validation
 python src/waste_calc.py   # waste losses and savings scenarios
 ```
 
-## Tests
+## Web app
 
 ```bash
-python -m unittest
+pip install -r requirements.txt
+streamlit run web_app.py
 ```
+
+Локальная база SQLite: `data/smart_canteen.db` (создаётся автоматически).
+
+## Ограничения безопасности
+
+Локальный демонстрационный прототип: только тестовые данные, без реальных персональных данных, без полноценной авторизации и разграничения прав. Не открывать публично без проверки.

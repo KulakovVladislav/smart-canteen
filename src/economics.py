@@ -31,6 +31,10 @@ def run():
     print_report()
 
 
+def waste_report():
+    return waste_calc.compute_report()
+
+
 def main():
     print_report()
 

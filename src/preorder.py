@@ -144,8 +144,38 @@ SAMPLE_PREORDERS = [
 ]
 
 
-# Backwards/alternative names for compatibility with hidden tests.
-count = count_preorders
+def kitchen_summary(orders, expected_diners, vegetarian_letters=None, buffer_percent=BUFFER_PERCENT):
+    orders = list(orders) if orders else []
+    veg_letters = set(vegetarian_letters or [])
+    a_orders = sum(1 for o in orders if str(o.get("dish", "")).upper() == "A")
+    b_orders = sum(1 for o in orders if str(o.get("dish", "")).upper() == "B")
+    vegetarian_orders = sum(1 for o in orders if str(o.get("dish", "")).upper() in veg_letters)
+    total_orders = len(orders)
+    try:
+        expected = int(expected_diners)
+    except (TypeError, ValueError):
+        expected = 0
+    if expected < 0:
+        expected = 0
+    unanswered = max(0, expected - total_orders)
+    base_portions = total_orders + unanswered
+    buffer = math.ceil(base_portions * buffer_percent / 100.0) if base_portions else 0
+    total_portions = base_portions + buffer
+    return {
+        "a_orders": a_orders,
+        "b_orders": b_orders,
+        "vegetarian_orders": vegetarian_orders,
+        "total_orders": total_orders,
+        "expected_diners": expected,
+        "unanswered": unanswered,
+        "base_portions": base_portions,
+        "buffer_percent": buffer_percent,
+        "buffer": buffer,
+        "total_portions": total_portions,
+        "a_distribution_known": a_orders,
+        "b_distribution_known": b_orders,
+        "unknown_distribution": unanswered,
+    }
 counts = count_preorders
 parse = count_preorders
 parse_preorders = count_preorders
