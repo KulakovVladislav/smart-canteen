@@ -1,35 +1,82 @@
-# Smart Canteen
+# Умная столовая
 
-Smart Canteen is a school canteen optimization project that uses student complaint clusters to redesign the weekly menu and reduce food waste. It estimates savings from waste reduction and provides a preorder summary for kitchen staff.
+«Умная столовая» — демонстрационный прототип системы для школьной столовой: меню под жалобы учеников, предзаказ, сводка для кухни, учёт фактических остатков, экономика и проверка себестоимости.
 
-## Folder structure
+## Основные функции
 
-- `data/` — input data (case parameters, waste by day, complaints)
-- `src/` — source code (waste calculation script)
-- `docs/` — documentation
-- `tests/` — tests
+- Меню на 5 учебных дней, по 2 блюда на день, вегетарианский вариант.
+- Предзаказ с сохранением в SQLite и обновлением существующего заказа.
+- Сводка для повара: порции A/B, вегетарианские, неответившие, резерв 5%, итого.
+- Ручной ввод фактических остатков и история измерений.
+- Экономические расчёты потерь и сценариев снижения отходов.
+- Проверка себестоимости с явным статусом при неизвестных ценах.
+- Необязательная генерация меню через внешнюю языковую модель.
+- Необязательный Telegram-бот предзаказа.
 
-
-
-## Run
+## Установка
 
 ```bash
-python app.py all          # menu + preorder summary + budget check + economics
-python app.py menu         # 5-day menu
-python app.py preorder     # preorder summary for kitchen
-python app.py budget-check # budget validation
-python src/waste_calc.py   # waste losses and savings scenarios
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-## Web app
+## Запуск
+
+Веб-приложение:
 
 ```bash
-pip install -r requirements.txt
 streamlit run web_app.py
 ```
 
-Локальная база SQLite: `data/smart_canteen.db` (создаётся автоматически).
+Интерфейс откроется по адресу `http://localhost:8501`.
+
+Командная строка:
+
+```bash
+python app.py all
+python app.py menu
+python app.py preorder
+python app.py budget-check
+```
+
+Тесты:
+
+```bash
+python -m unittest
+```
+
+## База данных
+
+SQLite-база: `data/smart_canteen.db` (создаётся автоматически). Файлы базы исключены из Git.
+
+## Настройка ИИ (необязательно)
+
+Задайте переменные окружения:
+
+```bash
+export AI_API_KEY=...
+export AI_BASE_URL=https://api.openai.com/v1   # необязательно
+export AI_MODEL=gpt-4o-mini                    # необязательно
+```
+
+Если ключ не задан, приложение работает на сохранённом или встроенном меню и честно сообщает, что ИИ недоступен.
+
+## Telegram-бот (необязательно)
+
+```bash
+export TELEGRAM_BOT_TOKEN=...
+export TELEGRAM_ADMIN_IDS=123456789            # через запятую
+export CANTEEN_EXPECTED_DINERS=500            # необязательно
+python bot.py
+```
+
+Без токена код бота и обработчики доступны для тестов, но реальный запуск не подтверждён.
 
 ## Ограничения безопасности
 
-Локальный демонстрационный прототип: только тестовые данные, без реальных персональных данных, без полноценной авторизации и разграничения прав. Не открывать публично без проверки.
+- Локальный демонстрационный прототип, без полноценной аутентификации и разграничения прав.
+- Ролевой переключатель в интерфейсе не является реальной авторизацией.
+- Не собирайте реальные персональные данные; используйте анонимные тестовые коды.
+- Не публикуйте приложение без проверки безопасности.
+- Перед реальным развёртыванием необходимо закрыть: аутентификацию, защиту данных, HTTPS, резервное копирование БД, аудит доступа, проверку развёртывания.

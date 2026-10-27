@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""CLI entry point for Smart Canteen demo."""
+"""Точка входа CLI для демонстрации «Умной столовой»."""
 
 import os
 import sys

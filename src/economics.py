@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Thin wrapper around waste_calc (no duplicate logic)."""
+"""Тонкая обёртка над waste_calc (без дублирования логики)."""
 
 try:
     from . import waste_calc

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Menu data structures and validators (stdlib only)."""
+"""Структуры данных меню и валидаторы (только стандартная библиотека)."""
 
 COST_CEILING = 140
 
@@ -52,8 +52,20 @@ MENU = [
 ]
 
 
-def get_menu():
+def get_menu(db_path=None):
+    if db_path is not None:
+        return get_active_menu(db_path)
     return [dict(item) for item in MENU]
+
+
+def get_active_menu(db_path=None):
+    saved = None
+    from src.storage import get_saved_menu
+
+    saved = get_saved_menu(db_path)
+    if saved:
+        return [dict(item) for item in saved]
+    return get_menu()
 
 
 def _is_nonempty(value):
@@ -86,7 +98,7 @@ def is_valid_menu(menu=None):
 
 
 def _extract_costs(costs, menu):
-    """Return list of (day, cost_a, cost_b)."""
+    """Вернуть список (день, стоимость A, стоимость B)."""
     if costs is None:
         return [(item["day"], None, None) for item in menu]
 
@@ -105,7 +117,7 @@ def _extract_costs(costs, menu):
                 ca = val
                 cb = None
             result.append((day, ca, cb))
-        # include any extra days provided
+            # Включаем дополнительные дни, если они переданы
         for day, val in costs.items():
             if day not in {m["day"] for m in menu}:
                 if isinstance(val, dict):
@@ -130,7 +142,7 @@ def _extract_costs(costs, menu):
                 cb = c.get("cost_b", c.get("B", c.get("b")))
                 result.append((item["day"], ca, cb))
         else:
-            # parallel to menu
+            # Параллельно меню
             for idx, item in enumerate(menu):
                 val = costs[idx] if idx < len(costs) else None
                 if isinstance(val, dict):
@@ -150,13 +162,13 @@ def _extract_costs(costs, menu):
 
 def _status(cost, limit):
     if cost is None or cost == "не указано":
-        return "не указано"
+        return "НЕДОСТАТОЧНО ДАННЫХ"
     try:
         value = float(cost)
     except (TypeError, ValueError):
-        return "не указано"
+        return "НЕДОСТАТОЧНО ДАННЫХ"
     if value > limit:
-        return "ПРЕВЫШЕНИЕ"
+        return "ПРЕВЫШЕНИЕ ЛИМИТА"
     return "OK"
 
 
@@ -178,20 +190,28 @@ def check_budget(costs=None, limit=COST_CEILING, menu=None):
                 "status": st,
             })
             label = f"{day} / блюдо {dish}"
-            if st == "не указано":
+            if st == "НЕДОСТАТОЧНО ДАННЫХ":
                 unknown.append(label)
-            elif st == "ПРЕВЫШЕНИЕ":
+            elif st == "ПРЕВЫШЕНИЕ ЛИМИТА":
                 over_limit.append(label)
 
     has_unknown = len(unknown) > 0
     has_over = len(over_limit) > 0
-    ok = not has_over
+
+    if has_over:
+        overall_status = "ПРЕВЫШЕНИЕ ЛИМИТА"
+    elif has_unknown:
+        overall_status = "НЕДОСТАТОЧНО ДАННЫХ"
+    else:
+        overall_status = "OK"
+
+    ok = (not has_over) and (not has_unknown)
 
     summary_lines = [
         f"Потолок себестоимости: {limit} сом/порция.",
         f"Не указано: {len(unknown)} позиций." if has_unknown else "Все стоимости указаны.",
         f"Превышение лимита: {len(over_limit)} позиций." if has_over else "Превышений лимита нет.",
-        "Статус: " + ("OK" if ok else "ЕСТЬ ПРЕВЫШЕНИЯ"),
+        "Статус: " + overall_status,
     ]
     summary = "\n".join(summary_lines)
 
@@ -204,7 +224,7 @@ def check_budget(costs=None, limit=COST_CEILING, menu=None):
         "has_unknown": has_unknown,
         "has_over_limit": has_over,
         "ok": ok,
-        "status": "OK" if ok else "ПРЕВЫШЕНИЕ",
+        "status": overall_status,
         "summary": summary,
     }
 
@@ -213,7 +233,7 @@ DAY_NAMES = ["Понедельник", "Вторник", "Среда", "Четв
 
 
 def day_for_date(value):
-    """Return Russian weekday name for a date (Mon-Fri), or None for weekend."""
+    """Вернуть русское название дня недели для даты (Пн-Пт) или None для выходного."""
     if hasattr(value, "weekday"):
         wd = value.weekday()
     else:
@@ -228,8 +248,10 @@ def day_for_date(value):
     return None
 
 
-def is_vegetarian_dish(day, dish):
-    for item in MENU:
+def is_vegetarian_dish(day, dish, menu=None):
+    if menu is None:
+        menu = MENU
+    for item in menu:
         if item["day"] == day:
             if dish == "A":
                 return bool(item.get("dish_a_vegetarian", False))
@@ -238,9 +260,11 @@ def is_vegetarian_dish(day, dish):
     return False
 
 
-def vegetarian_letters_for_day(day):
+def vegetarian_letters_for_day(day, menu=None):
+    if menu is None:
+        menu = MENU
     result = []
-    for item in MENU:
+    for item in menu:
         if item["day"] == day:
             if item.get("dish_a_vegetarian"):
                 result.append("A")

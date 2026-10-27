@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Preorder counting and kitchen summary generation (stdlib only)."""
+"""Подсчёт предзаказов и формирование сводки для кухни (только стандартная библиотека)."""
 
 import math
 
@@ -24,11 +24,27 @@ def _normalize(choice):
     return None
 
 
-def count_preorders(choices=None, default_choice="A", buffer_percent=BUFFER_PERCENT):
+def _shares_from_choice(default_choice):
+    if default_choice == "A":
+        return (1.0, 0.0)
+    if default_choice == "B":
+        return (0.0, 1.0)
+    if default_choice == "split":
+        return (0.5, 0.5)
+    return None
+
+
+def count_preorders(
+    choices=None,
+    default_choice=None,
+    buffer_percent=BUFFER_PERCENT,
+    historical_shares=None,
+    vegetarian_letters=None,
+):
     """Count preorder choices and compute portions with a safety buffer.
 
-    choices: iterable of "A"/"B" (case-insensitive), dicts with a choice key,
-             or None/empty/invalid entries (treated as unanswered).
+    Unanswered students are included in the total portion count, but are not
+    silently assigned to a dish unless historical shares are explicitly provided.
     """
     items = list(choices) if choices is not None else []
 
@@ -39,7 +55,6 @@ def count_preorders(choices=None, default_choice="A", buffer_percent=BUFFER_PERC
 
     for raw in items:
         if isinstance(raw, dict):
-            # track invalid separately only when a value present but bad
             had_value = any(k in raw for k in ("choice", "dish", "answer", "selection", "value", "option"))
             norm = _normalize(raw)
             if norm is None:
@@ -64,23 +79,45 @@ def count_preorders(choices=None, default_choice="A", buffer_percent=BUFFER_PERC
 
     unanswered_total = unanswered + invalid
 
-    if default_choice == "B":
-        default_a = 0
-        default_b = unanswered_total
-    elif default_choice == "split":
-        default_a = unanswered_total // 2
-        default_b = unanswered_total - default_a
-    else:
-        default_a = unanswered_total
-        default_b = 0
+    if historical_shares is None:
+        historical_shares = _shares_from_choice(default_choice)
 
-    a_portions = answered_a + default_a
-    b_portions = answered_b + default_b
-    vegetarian = b_portions
-    base_portions = a_portions + b_portions
+    est_a = 0
+    est_b = 0
+    estimated = False
+    if historical_shares is not None and unanswered_total > 0:
+        try:
+            sa, sb = historical_shares
+            sa = float(sa)
+            sb = float(sb)
+        except (TypeError, ValueError):
+            sa, sb = 0.0, 0.0
+        total_share = sa + sb
+        if total_share > 0:
+            sa /= total_share
+            sb /= total_share
+            est_a = int(round(unanswered_total * sa))
+            est_b = unanswered_total - est_a
+            estimated = True
+
+    a_portions = answered_a + est_a
+    b_portions = answered_b + est_b
+    base_portions = answered_a + answered_b + unanswered_total
+
+    if vegetarian_letters is None:
+        veg_letters = {"B"}
+    else:
+        veg_letters = {str(x).upper() for x in vegetarian_letters}
+    # Для count_preorders известны только буквы, поэтому число вегетарианских —
+    # оценка на основе переданных (или стандартных) вегетарианских букв.
+    vegetarian = answered_b if "B" in veg_letters else 0
+    if "A" in veg_letters:
+        vegetarian += answered_a
 
     buffer = math.ceil(base_portions * buffer_percent / 100.0) if base_portions else 0
     total = base_portions + buffer
+
+    unknown_distribution = 0 if estimated else unanswered_total
 
     return {
         "total_students": len(items),
@@ -97,8 +134,10 @@ def count_preorders(choices=None, default_choice="A", buffer_percent=BUFFER_PERC
         "invalid": invalid,
         "invalid_count": invalid,
         "default_choice": default_choice,
-        "default_a": default_a,
-        "default_b": default_b,
+        "historical_shares": historical_shares,
+        "estimated_distribution": estimated,
+        "est_a": est_a,
+        "est_b": est_b,
         "a_portions": a_portions,
         "b_portions": b_portions,
         "portions_a": a_portions,
@@ -113,6 +152,7 @@ def count_preorders(choices=None, default_choice="A", buffer_percent=BUFFER_PERC
         "base_portions": base_portions,
         "total": total,
         "total_portions": total,
+        "unknown_distribution": unknown_distribution,
     }
 
 
@@ -144,9 +184,9 @@ SAMPLE_PREORDERS = [
 ]
 
 
-def kitchen_summary(orders, expected_diners, vegetarian_letters=None, buffer_percent=BUFFER_PERCENT):
+def kitchen_summary(orders, expected_diners, vegetarian_letters=None, buffer_percent=BUFFER_PERCENT, historical_shares=None, default_choice=None):
     orders = list(orders) if orders else []
-    veg_letters = set(vegetarian_letters or [])
+    veg_letters = {str(x).upper() for x in (vegetarian_letters or [])}
     a_orders = sum(1 for o in orders if str(o.get("dish", "")).upper() == "A")
     b_orders = sum(1 for o in orders if str(o.get("dish", "")).upper() == "B")
     vegetarian_orders = sum(1 for o in orders if str(o.get("dish", "")).upper() in veg_letters)
@@ -159,8 +199,30 @@ def kitchen_summary(orders, expected_diners, vegetarian_letters=None, buffer_per
         expected = 0
     unanswered = max(0, expected - total_orders)
     base_portions = total_orders + unanswered
+
+    if historical_shares is None:
+        historical_shares = _shares_from_choice(default_choice)
+    est_a = est_b = 0
+    estimated = False
+    if historical_shares is not None and unanswered > 0:
+        try:
+            sa, sb = historical_shares
+            sa, sb = float(sa), float(sb)
+        except (TypeError, ValueError):
+            sa, sb = 0.0, 0.0
+        total_share = sa + sb
+        if total_share > 0:
+            sa /= total_share
+            sb /= total_share
+            est_a = int(round(unanswered * sa))
+            est_b = unanswered - est_a
+            estimated = True
+
+    a_portions = a_orders + est_a
+    b_portions = b_orders + est_b
     buffer = math.ceil(base_portions * buffer_percent / 100.0) if base_portions else 0
     total_portions = base_portions + buffer
+    unknown_distribution = 0 if estimated else unanswered
     return {
         "a_orders": a_orders,
         "b_orders": b_orders,
@@ -172,9 +234,14 @@ def kitchen_summary(orders, expected_diners, vegetarian_letters=None, buffer_per
         "buffer_percent": buffer_percent,
         "buffer": buffer,
         "total_portions": total_portions,
+        "a_portions": a_portions,
+        "b_portions": b_portions,
+        "est_a": est_a,
+        "est_b": est_b,
+        "estimated_distribution": estimated,
         "a_distribution_known": a_orders,
         "b_distribution_known": b_orders,
-        "unknown_distribution": unanswered,
+        "unknown_distribution": unknown_distribution,
     }
 counts = count_preorders
 parse = count_preorders

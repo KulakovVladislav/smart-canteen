@@ -3,7 +3,7 @@ __pycache__/
 *.pyc
 data/*.db
 data/smart_canteen.db
-.streamlit/
+.streamlit/secrets.toml
 *.secret
 .env
 secrets.toml

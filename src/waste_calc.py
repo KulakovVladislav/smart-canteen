@@ -15,12 +15,35 @@ WASTE_KG_PER_DAY = 60
 WASTE_COST_PER_KG = 15
 
 
+REQUIRED_COLUMNS = {"day", "waste_percent"}
+
+
 def load_waste():
+    if not os.path.exists(CSV_PATH):
+        raise FileNotFoundError(f"waste data file not found: {CSV_PATH}")
     rows = []
     with open(CSV_PATH, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
-        for r in reader:
-            rows.append((r["day"], float(r["waste_percent"])))
+        if reader.fieldnames is None or not REQUIRED_COLUMNS.issubset(set(reader.fieldnames)):
+            raise ValueError(
+                "waste CSV must contain columns: " + ", ".join(sorted(REQUIRED_COLUMNS))
+            )
+        for line_no, r in enumerate(reader, start=2):
+            day = (r.get("day") or "").strip()
+            raw_pct = r.get("waste_percent")
+            if not day:
+                raise ValueError(f"waste CSV row {line_no}: day is required")
+            try:
+                pct = float(raw_pct)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"waste CSV row {line_no}: waste_percent must be a number"
+                ) from exc
+            if pct < 0:
+                raise ValueError(f"waste CSV row {line_no}: waste_percent must be non-negative")
+            rows.append((day, pct))
+    if not rows:
+        raise ValueError("waste CSV contains no data rows")
     return rows
 
 
@@ -37,8 +60,11 @@ def compute_report():
         week_total += loss
         day_rows.append({"day": day, "pct": pct, "loss": loss})
     year_waste = week_total * WEEKS_PER_YEAR
-    util_year = WASTE_KG_PER_DAY * WASTE_COST_PER_KG * SCHOOL_DAYS_PER_YEAR
-    total = year_waste + util_year
+    util_day = WASTE_KG_PER_DAY * WASTE_COST_PER_KG
+    util_year = util_day * SCHOOL_DAYS_PER_YEAR
+    # Это разные статьи расходов. Их сумма показывается только как объединённая
+    # оценка, потому что двойной учёт нельзя исключить без исходных данных.
+    combined_losses = year_waste + util_year
     avg_pct = sum(p for _, p in rows) / len(rows) if rows else 0.0
     weekly_budget = BUDGET_PER_DAY * DAYS_PER_WEEK
     scenarios = []
@@ -50,8 +76,11 @@ def compute_report():
         "rows": day_rows,
         "week_total": week_total,
         "year_waste": year_waste,
+        "util_day": util_day,
         "util_year": util_year,
-        "total": total,
+        "utilization_year": util_year,
+        "combined_losses": combined_losses,
+        "total": combined_losses,
         "avg_pct": avg_pct,
         "scenarios": scenarios,
     }
@@ -63,9 +92,10 @@ def main():
     for r in report["rows"]:
         print(f"  {r['day']}: {r['pct']:g}% -> {fmt(r['loss'])} сом")
     print(f"Неделя: {fmt(report['week_total'])} сом")
-    print(f"Год (35 недель): {fmt(report['year_waste'])} сом")
+    print(f"Год (35 недель), продукты: {fmt(report['year_waste'])} сом")
+    print(f"Утилизация в день: {fmt(report['util_day'])} сом")
     print(f"Утилизация за год: {fmt(report['util_year'])} сом")
-    print(f"Итого прямые потери: {fmt(report['total'])} сом")
+    print(f"Сумма категорий (с риском двойного учёта): {fmt(report['combined_losses'])} сом")
     print("\nСценарии снижения отходов:")
     for s in report["scenarios"]:
         print(f"  до {s['target']}%: экономия в неделю {fmt(s['saving_week'])} сом, за год {fmt(s['saving_year'])} сом")

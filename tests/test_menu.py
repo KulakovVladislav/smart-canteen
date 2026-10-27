@@ -40,7 +40,8 @@ class TestMenu(unittest.TestCase):
         report = check_budget()
         self.assertTrue(report["has_unknown"])
         self.assertFalse(report["has_over_limit"])
-        self.assertTrue(report["ok"])
+        self.assertFalse(report["ok"])
+        self.assertEqual(report["status"], "НЕДОСТАТОЧНО ДАННЫХ")
 
     def test_budget_over_limit(self):
         costs = {"Понедельник": {"A": 150, "B": 130}}
