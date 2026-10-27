@@ -11,8 +11,18 @@ Smart Canteen is a school canteen optimization project that uses student complai
 
 
 
-## Run the script
+## Run
 
 ```bash
-python src/waste_calc.py
+python app.py all          # menu + preorder summary + budget check + economics
+python app.py menu         # 5-day menu
+python app.py preorder     # preorder summary for kitchen
+python app.py budget-check # budget validation
+python src/waste_calc.py   # waste losses and savings scenarios
+```
+
+## Tests
+
+```bash
+python -m unittest
 ```
