@@ -13,7 +13,7 @@ from datetime import date, timedelta
 
 from domain.menu import day_for_date, get_active_menu, vegetarian_letters_for_day
 from domain.preorder import kitchen_summary
-from repositories.storage import get_orders, get_subscribers, save_order, subscribe_chat
+from repositories.storage import get_orders, get_subscribers, save_leftover, save_order, subscribe_chat
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -171,18 +171,32 @@ def menu_text_for_date(meal_date, db_path=None):
 
 
 def build_main_keyboard(is_admin_user=False):
-    rows = [
-        [
-            {"text": "📋 Меню на завтра", "callback_data": "nav:menu"},
-            {"text": "🛒 Заказать", "callback_data": "nav:order"},
-        ],
-        [
-            {"text": "🧾 Мой заказ", "callback_data": "nav:myorder"},
-            {"text": "❓ Помощь", "callback_data": "nav:help"},
-        ],
-    ]
     if is_admin_user:
-        rows.append([{"text": "📊 Сводка для кухни", "callback_data": "nav:summary"}])
+        rows = [
+            [
+                {"text": "📊 Сводка на сегодня", "callback_data": "nav:summary"},
+                {"text": "📝 Внести остатки", "callback_data": "nav:leftover"},
+            ],
+            [
+                {"text": "📋 Меню на завтра", "callback_data": "nav:menu"},
+                {"text": "🛒 Заказать обед", "callback_data": "nav:order"},
+            ],
+            [
+                {"text": "🧾 Мой заказ", "callback_data": "nav:myorder"},
+                {"text": "❓ Помощь", "callback_data": "nav:help"},
+            ],
+        ]
+    else:
+        rows = [
+            [
+                {"text": "📋 Меню на завтра", "callback_data": "nav:menu"},
+                {"text": "🛒 Заказать обед", "callback_data": "nav:order"},
+            ],
+            [
+                {"text": "🧾 Мой заказ", "callback_data": "nav:myorder"},
+                {"text": "❓ Помощь", "callback_data": "nav:help"},
+            ],
+        ]
     rows.append([{"text": "🏠 Главное меню", "callback_data": "nav:home"}])
     return {"inline_keyboard": rows}
 
@@ -298,9 +312,22 @@ def handle_update(update, token=None, db_path=None):
                         "ℹ️ <b>Как пользоваться:</b>\n"
                         "📋 /menu — посмотреть меню на завтра\n"
                         "🛒 /order — выбрать блюдо (кнопками)\n"
-                        "🧾 /myorder — проверить свой заказ\n\n"
+                        "🧾 /myorder — проверить свой заказ\n"
+                        "Поварам: 📊 сводка и 📝 /leftover <кг> <порций>\n\n"
                         "Заказ можно изменить до закрытия опроса.\n"
-                        "Администраторам доступна команда /summary YYYY-MM-DD. 🛠️",
+                        "Администраторам: /summary YYYY-MM-DD. 🛠️",
+                        reply_markup=keyboard,
+                    )
+                elif action == "leftover":
+                    keyboard = build_main_keyboard(is_admin(user_id))
+                    send_message(
+                        token,
+                        chat_id,
+                        "📝 <b>Внести остатки после обеда</b>\n\n"
+                        "Отправьте командой:\n"
+                        "<code>/leftover 1.5 2 примечание</code>\n"
+                        "где 1.5 кг отходов, 2 порции осталось.\n"
+                        "Примечание необязательно.",
                         reply_markup=keyboard,
                     )
                 elif action == "summary" and is_admin(user_id):
@@ -376,9 +403,10 @@ def handle_update(update, token=None, db_path=None):
                 "ℹ️ <b>Как пользоваться:</b>\n"
                 "📋 /menu — посмотреть меню на завтра\n"
                 "🛒 /order — выбрать блюдо (кнопками)\n"
-                "🧾 /myorder — проверить свой заказ\n\n"
+                "🧾 /myorder — проверить свой заказ\n"
+                "Поварам: 📊 сводка и 📝 /leftover <кг> <порций>\n\n"
                 "Заказ можно изменить до закрытия опроса.\n"
-                "Администраторам доступна команда /summary YYYY-MM-DD. 🛠️",
+                "Администраторам: /summary YYYY-MM-DD. 🛠️",
                 reply_markup=build_main_keyboard(is_admin(user_id)),
             )
         return
@@ -411,6 +439,33 @@ def handle_update(update, token=None, db_path=None):
                 send_message(token, chat_id, f"✅ <b>Ваш заказ на {html.escape(d.isoformat())}:</b> блюдо <b>{html.escape(str(orders[0]['dish']))}</b> 🎉", reply_markup=keyboard)
             else:
                 send_message(token, chat_id, f"ℹ️ Заказ на {html.escape(d.isoformat())} пока не оформлен. Используйте /order. 🛒", reply_markup=keyboard)
+        return
+    if text.startswith("/leftover"):
+        if not is_admin(user_id):
+            if token:
+                send_message(token, chat_id, "🔒 Внесение остатков доступно только поварам/администраторам.")
+            return
+        parts = text.split()
+        if len(parts) < 3:
+            if token:
+                send_message(token, chat_id, "Использование: /leftover <кг> <порций> [примечание]")
+            return
+        try:
+            waste = float(parts[1].replace(",", "."))
+            portions = int(parts[2])
+        except ValueError:
+            if token:
+                send_message(token, chat_id, "⚠️ Неверные числа. Пример: /leftover 1.5 2 примечание")
+            return
+        note = " ".join(parts[3:]) if len(parts) > 3 else ""
+        try:
+            save_leftover(date.today().isoformat(), waste, portions, note, db_path=db_path)
+            if token:
+                keyboard = build_main_keyboard(True)
+                send_message(token, chat_id, f"✅ Остатки сохранены: {waste} кг, {portions} порций. {html.escape(note)}", reply_markup=keyboard)
+        except Exception as exc:
+            if token:
+                send_message(token, chat_id, f"Не удалось сохранить остатки: {exc}")
         return
     if text.startswith("/summary"):
         if not is_admin(user_id):
