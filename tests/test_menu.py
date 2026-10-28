@@ -30,13 +30,12 @@ class TestMenu(unittest.TestCase):
         self.assertFalse(ok)
         self.assertTrue(errors)
 
-    def test_invalid_menu_missing_vegetarian(self):
+    def test_menu_without_vegetarian_allowed(self):
         bad = [dict(item) for item in get_menu()]
         bad[0]["dish_a_vegetarian"] = False
         bad[0]["dish_b_vegetarian"] = False
         ok, errors = validate_menu(bad)
-        self.assertFalse(ok)
-        self.assertTrue(errors)
+        self.assertTrue(ok, errors)
 
     def test_truthy_vegetarian_flags_normalized(self):
         menu = [dict(item) for item in get_menu()]
@@ -45,12 +44,11 @@ class TestMenu(unittest.TestCase):
         ok, errors = validate_menu(menu)
         self.assertTrue(ok, errors)
 
-    def test_empty_complaint_rejected(self):
+    def test_empty_complaint_allowed(self):
         menu = [dict(item) for item in get_menu()]
         menu[0]["complaint_cluster"] = "   "
         ok, errors = validate_menu(menu)
-        self.assertFalse(ok)
-        self.assertTrue(errors)
+        self.assertTrue(ok, errors)
 
     def test_budget_unknown_by_default(self):
         report = check_budget()

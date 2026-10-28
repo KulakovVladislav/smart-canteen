@@ -51,20 +51,18 @@ class TestCostFormats(unittest.TestCase):
 
 
 class TestMenuValidation(unittest.TestCase):
-    def test_missing_vegetarian_rejected(self):
+    def test_missing_vegetarian_allowed(self):
         menu = [dict(item) for item in get_menu()]
         menu[0]["dish_a_vegetarian"] = False
         menu[0]["dish_b_vegetarian"] = False
         ok, errors = validate_menu(menu)
-        self.assertFalse(ok)
-        self.assertTrue(any("vegetarian" in e for e in errors))
+        self.assertTrue(ok, errors)
 
-    def test_empty_complaint_rejected(self):
+    def test_empty_complaint_allowed(self):
         menu = [dict(item) for item in get_menu()]
         menu[0]["complaint_cluster"] = "   "
         ok, errors = validate_menu(menu)
-        self.assertFalse(ok)
-        self.assertTrue(any("complaint_cluster" in e for e in errors))
+        self.assertTrue(ok, errors)
 
     def test_truthy_vegetarian_flags_normalized(self):
         menu = [dict(item) for item in get_menu()]

@@ -259,7 +259,7 @@ def get_leftovers(db_path=None, limit=None):
         conn.close()
 
 
-from domain.menu import DAY_NAMES, MENU, validate_menu
+from domain.menu import DAY_NAMES, MENU, _strict_bool, validate_menu
 
 def save_menu(menu, db_path=None):
     ok, errors = validate_menu(menu)
@@ -280,12 +280,15 @@ def save_menu(menu, db_path=None):
                     str(item["dish_a"]).strip(),
                     str(item["dish_b"]).strip(),
                     str(item.get("complaint_cluster", "")).strip(),
-                    1 if item.get("dish_a_vegetarian") else 0,
-                    1 if item.get("dish_b_vegetarian") else 0,
+                    1 if _strict_bool(item.get("dish_a_vegetarian", False)) else 0,
+                    1 if _strict_bool(item.get("dish_b_vegetarian", False)) else 0,
                     _now(),
                 ),
             )
         conn.commit()
+    except sqlite3.IntegrityError as exc:
+        conn.rollback()
+        raise ValueError("menu contains duplicate or invalid day") from exc
     finally:
         conn.close()
 

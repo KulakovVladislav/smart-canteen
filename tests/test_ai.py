@@ -38,13 +38,13 @@ class TestAIMenu(unittest.TestCase):
         self.assertEqual(len(data), 1)
 
     def test_normalize(self):
-        data = [{"day": "Пн", "dish_a": "A", "dish_b": "B", "complaint_cluster": "x", "dish_a_vegetarian": False, "dish_b_vegetarian": True}]
+        data = [{"day": "Понедельник", "dish_a": "A", "dish_b": "B", "complaint_cluster": "x", "dish_a_vegetarian": False, "dish_b_vegetarian": True}]
         menu = normalize_menu(data)
-        self.assertEqual(menu[0]["day"], "Пн")
+        self.assertEqual(menu[0]["day"], "Понедельник")
         self.assertTrue(menu[0]["dish_b_vegetarian"])
 
     def test_validate_ai_menu_missing_veg(self):
-        menu = [{"day": "Пн", "dish_a": "A", "dish_b": "B", "complaint_cluster": "x", "dish_a_vegetarian": False, "dish_b_vegetarian": False}]
+        menu = [{"day": "Понедельник", "dish_a": "A", "dish_b": "B", "complaint_cluster": "x", "dish_a_vegetarian": False, "dish_b_vegetarian": False}]
         ok, errors = validate_ai_menu(menu)
         self.assertFalse(ok)
         self.assertTrue(errors)

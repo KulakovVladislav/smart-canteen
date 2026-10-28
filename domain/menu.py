@@ -74,6 +74,21 @@ def _is_nonempty(value):
     return isinstance(value, str) and value.strip() != ""
 
 
+def _strict_bool(value):
+    """Строго разобрать булево значение без Python-истины строк."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+    raise ValueError("expected a boolean value")
+
+
 def validate_menu(menu=None) -> tuple[bool, list[str]]:
     if menu is None:
         menu = MENU
@@ -82,17 +97,39 @@ def validate_menu(menu=None) -> tuple[bool, list[str]]:
         return False, ["menu must be a list"]
     if len(menu) != 5:
         errors.append(f"expected 5 days, got {len(menu)}")
+    days = []
     for i, item in enumerate(menu):
         if not isinstance(item, dict):
             errors.append(f"day {i}: item must be a dict")
             continue
-        for key in ("day", "dish_a", "dish_b", "complaint_cluster"):
+        for key in ("day", "dish_a", "dish_b"):
             if key not in item or not _is_nonempty(item.get(key)):
                 errors.append(f"day {i}: missing or empty '{key}'")
-        veg_a = bool(item.get("dish_a_vegetarian", False))
-        veg_b = bool(item.get("dish_b_vegetarian", False))
-        if not (veg_a or veg_b):
-            errors.append(f"day {i}: at least one dish must be vegetarian")
+        if "complaint_cluster" not in item or not isinstance(item.get("complaint_cluster"), str):
+            errors.append(f"day {i}: missing or invalid 'complaint_cluster'")
+        if "day" in item and _is_nonempty(item.get("day")):
+            days.append(str(item.get("day")).strip())
+        veg_a = False
+        veg_b = False
+        for field, target in (("dish_a_vegetarian", "a"), ("dish_b_vegetarian", "b")):
+            if field in item and item.get(field) is not None:
+                try:
+                    value = _strict_bool(item.get(field))
+                except ValueError:
+                    errors.append(f"day {i}: '{field}' must be a boolean")
+                    value = False
+                if target == "a":
+                    veg_a = value
+                else:
+                    veg_b = value
+            elif field in item and item.get(field) is None:
+                errors.append(f"day {i}: '{field}' must be a boolean")
+        # Наличие вегетарианского блюда не является обязательным по текущему контракту.
+    if len(days) == 5 and days != DAY_NAMES:
+        errors.append("days must be Понедельник, Вторник, Среда, Четверг, Пятница in this order")
+    elif len(days) != 5 and len(menu) == 5:
+        # Дублирующиеся или неизвестные дни уже отражены в списке days.
+        pass
     return (len(errors) == 0, errors)
 
 

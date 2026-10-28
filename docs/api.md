@@ -22,4 +22,4 @@
 - `ai_menu.generate_menu(...)`, `validate_ai_menu(...)`
 - `telegram_bot.run_bot(...)`
 
-Устаревшие алиасы помечены `DeprecationWarning`.
+Отдельные устаревшие имена функций в канонических модулях помечены `DeprecationWarning`. Обёртки `src/*` сами по себе не выводят предупреждение.

@@ -8,13 +8,13 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from domain.menu import get_menu, validate_menu, check_budget
+from domain.menu import get_active_menu, check_budget
 from domain.preorder import SAMPLE_PREORDERS, count_preorders, format_summary
 from domain.economics import print_report
 
 
 def cmd_menu():
-    for item in get_menu():
+    for item in get_active_menu():
         print(f"{item['day']}: A — {item['dish_a']} | B — {item['dish_b']}")
         print(f"   жалоба: {item['complaint_cluster']}")
 
@@ -25,7 +25,7 @@ def cmd_preorder():
 
 
 def cmd_budget_check():
-    report = check_budget()
+    report = check_budget(menu=get_active_menu())
     print(report["summary"])
     for it in report["items"]:
         print(f"  {it['day']} / {it['dish']}: {it['cost_display']} сом — {it['status']}")

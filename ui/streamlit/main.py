@@ -60,7 +60,7 @@ try:
 except FileNotFoundError:
     CUSTOM_CSS = ""
 
-st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+st.markdown(f"<style>{CUSTOM_CSS}</style>", unsafe_allow_html=True)
 
 
 def fmt_money(x):
@@ -77,6 +77,22 @@ def status_for_budget(report):
 
 def _go_to_preorder():
     st.session_state["page"] = "Предзаказ"
+
+
+def _reset_demo_data():
+    try:
+        reset_demo_data()
+        st.session_state["demo_reset_flash"] = (
+            "success",
+            "Демонстрационные данные очищены: заказы, стоимости блюд и остатки удалены. "
+            "Сохранённое меню не изменено.",
+        )
+    except Exception as exc:
+        st.session_state["demo_reset_flash"] = (
+            "error",
+            f"Не удалось очистить демонстрационные данные: {exc}",
+        )
+    st.session_state["reset_confirmed"] = False
 
 
 def page_home():
@@ -98,7 +114,7 @@ def page_home():
     st.write("")
     st.button("Сделать предзаказ 🛒", on_click=_go_to_preorder, width="stretch")
 
-    with st.container(border=True):
+    with st.container(border=True, key="home-menu-card"):
         st.subheader("Меню на текущую неделю")
         menu = get_active_menu()
         st.dataframe(
@@ -124,7 +140,7 @@ def page_home():
         )
 
     if report is not None:
-        with st.container(border=True):
+        with st.container(border=True, key="home-savings-card"):
             col_a, col_b = st.columns([3, 1])
             with col_a:
                 st.subheader("Сценарии экономии (расчётные)")
@@ -244,6 +260,12 @@ def page_preorder():
 
 def page_kitchen():
     st.title("Сводка для повара")
+    for flash_key in ("demo_reset_flash", "demo_orders_flash"):
+        flash = st.session_state.pop(flash_key, None)
+        if flash:
+            kind, message = flash
+            (st.success if kind == "success" else st.error)(message)
+
     meal_date = st.date_input("Дата сводки", value=date.today(), key="kitchen_date")
     expected = st.number_input("Ожидаемое число обедающих", min_value=0, value=500, step=10)
     hist_mode = st.selectbox(
@@ -297,23 +319,24 @@ def page_kitchen():
         st.info("Заказов на дату пока нет. Загрузите тестовые данные ниже или дождитесь предзаказов.")
     with st.expander("Тестовые данные"):
         if st.button("Загрузить тестовые заказы на выбранную дату"):
-            with st.spinner("Загрузка..."):
-                seed_demo_orders(date_str)
-            st.success("Тестовые заказы добавлены.")
+            try:
+                with st.spinner("Загрузка..."):
+                    seed_demo_orders(date_str)
+                st.session_state["demo_orders_flash"] = ("success", "Тестовые заказы добавлены.")
+            except Exception as exc:
+                st.session_state["demo_orders_flash"] = ("error", f"Не удалось загрузить тестовые заказы: {exc}")
             st.rerun()
         reset_confirmed = st.checkbox(
-            "Подтверждаю сброс всех демонстрационных данных",
+            "Подтверждаю очистку заказов, стоимостей блюд и остатков",
             key="reset_confirmed",
         )
-        if st.button(
-            "Сбросить демонстрационные данные (заказы и цены)",
+        st.button(
+            "Очистить заказы, стоимости и остатки",
             disabled=not reset_confirmed,
-        ):
-            with st.spinner("Сброс..."):
-                reset_demo_data()
-            st.success("Демонстрационные данные очищены.")
-            st.session_state["reset_confirmed"] = False
-            st.rerun()
+            on_click=_reset_demo_data,
+            key="reset_demo_data",
+        )
+        st.caption("Сохранённое меню (в том числе после AI-генерации) не удаляется.")
 
 
 def page_leftovers():
@@ -427,6 +450,10 @@ def page_economics():
 def page_budget():
     st.title("Проверка бюджета")
     st.caption(f"Лимит себестоимости: {COST_CEILING} сом на порцию.")
+    flash = st.session_state.pop("costs_flash", None)
+    if flash:
+        kind, message = flash
+        (st.success if kind == "success" else st.error)(message)
 
     costs = get_dish_costs()
     st.subheader("Стоимость блюд (демонстрационный ввод)")
@@ -461,10 +488,10 @@ def page_budget():
             for (day, letter), (val, known) in edited.items():
                 with st.spinner("Сохранение..."):
                     save_dish_cost(day, letter, val if known else None)
-            st.success("Стоимости сохранены локально.")
-            st.rerun()
+            st.session_state["costs_flash"] = ("success", "Стоимости сохранены локально.")
         except Exception as exc:
-            st.error(str(exc))
+            st.session_state["costs_flash"] = ("error", str(exc))
+        st.rerun()
 
     saved = get_dish_costs()
     cost_dict = {}

@@ -1,0 +1,313 @@
+/* Умная столовая — дизайн-система Streamlit.
+ *
+ * Палитра совпадает с .streamlit/config.toml. Цветовые токены используют
+ * light-dark() и наследуют color-scheme от контейнера Streamlit, поэтому
+ * светлая и тёмная темы переключаются вместе с темой приложения.
+ * В браузерах без light-dark() остаются светлые значения (тема по умолчанию).
+ */
+
+:root {
+    /* Типографика */
+    --sc-font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --sc-heading-font: var(--sc-font);
+    --sc-text-base: 0.95rem;
+    --sc-text-sm: 0.85rem;
+    --sc-text-xs: 0.78rem;
+    --sc-line-height: 1.55;
+
+    /* Отступы */
+    --sc-space-xs: 4px;
+    --sc-space-sm: 8px;
+    --sc-space: 12px;
+    --sc-space-md: 16px;
+    --sc-space-lg: 24px;
+    --sc-space-xl: 32px;
+
+    /* Радиусы */
+    --sc-radius-sm: 8px;
+    --sc-radius: 12px;
+    --sc-radius-lg: 16px;
+
+    /* Светлая тема — базовые значения и запасной вариант */
+    --sc-bg: #f4f5f3;
+    --sc-bg-soft: #eceee8;
+    --sc-card: #ffffff;
+    --sc-surface: #f7f8f5;
+    --sc-text: #1b2a26;
+    --sc-text-soft: #4a5c55;
+    --sc-muted: #6b7a73;
+    --sc-primary: #0f5b4f;
+    --sc-primary-soft: #e8f4f1;
+    --sc-success: #1f8a5a;
+    --sc-warning: #9a6f1f;
+    --sc-danger: #b33a2b;
+    --sc-border: #e3e5e1;
+    --sc-divider: #e9ebde;
+    --sc-shadow-sm: 0 1px 2px rgba(27, 42, 38, 0.06);
+    --sc-shadow-md: 0 4px 12px rgba(27, 42, 38, 0.08);
+}
+
+@supports (color: light-dark(#ffffff, #000000)) {
+    /* Streamlit задаёт color-scheme на .stApp, поэтому токены разрешаются
+       именно на этом элементе и наследуются вглубь интерфейса. */
+    .stApp {
+        --sc-bg: light-dark(#f4f5f3, #0f1412);
+        --sc-bg-soft: light-dark(#eceee8, #161b18);
+        --sc-card: light-dark(#ffffff, #181e1b);
+        --sc-surface: light-dark(#f7f8f5, #1c2320);
+        --sc-text: light-dark(#1b2a26, #e8efe9);
+        --sc-text-soft: light-dark(#4a5c55, #b9c6be);
+        --sc-muted: light-dark(#6b7a73, #8a9890);
+        --sc-primary: light-dark(#0f5b4f, #1fb08a);
+        --sc-primary-soft: light-dark(#e8f4f1, #143830);
+        --sc-success: light-dark(#1f8a5a, #2fb978);
+        --sc-warning: light-dark(#9a6f1f, #e0a84b);
+        --sc-danger: light-dark(#b33a2b, #e06a5a);
+        --sc-border: light-dark(#e3e5e1, #2a312d);
+        --sc-divider: light-dark(#e9ebde, #232926);
+        --sc-shadow-sm: 0 1px 2px light-dark(rgba(27, 42, 38, 0.06), rgba(0, 0, 0, 0.4));
+        --sc-shadow-md: 0 4px 12px light-dark(rgba(27, 42, 38, 0.08), rgba(0, 0, 0, 0.5));
+    }
+}
+
+/* Основа */
+.stApp {
+    background: var(--sc-bg);
+    color: var(--sc-text);
+    font-family: var(--sc-font);
+}
+
+.block-container {
+    max-width: 1200px;
+    padding-top: var(--sc-space-xl);
+    padding-bottom: calc(var(--sc-space-xl) + var(--sc-space-lg));
+}
+
+.stApp h1,
+.stApp h2,
+.stApp h3,
+.stApp h4 {
+    color: var(--sc-text);
+    font-family: var(--sc-heading-font);
+    letter-spacing: -0.015em;
+}
+
+.stApp h1 {
+    font-size: clamp(2rem, 3.2vw, 2.7rem);
+    line-height: 1.1;
+    margin-bottom: var(--sc-space-sm);
+}
+
+.stApp h2 {
+    font-size: clamp(1.35rem, 2vw, 1.7rem);
+    line-height: 1.2;
+}
+
+.stApp h3 {
+    font-size: 1.15rem;
+    line-height: 1.3;
+}
+
+.stApp [data-testid="stMarkdownContainer"] > p,
+.stApp [data-testid="stMarkdownContainer"] > ul > li,
+.stApp [data-testid="stMarkdownContainer"] > ol > li {
+    color: var(--sc-text-soft);
+    line-height: var(--sc-line-height);
+}
+
+.stApp [data-testid="stCaptionContainer"] {
+    color: var(--sc-muted);
+    font-size: var(--sc-text-sm);
+}
+
+/* Карточки */
+.st-key-home-menu-card,
+.st-key-home-savings-card {
+    background: var(--sc-card);
+    border: 1px solid var(--sc-border);
+    border-radius: var(--sc-radius-lg);
+    box-shadow: var(--sc-shadow-sm);
+    overflow: hidden;
+}
+
+.st-key-home-menu-card > [data-testid="stColumn"],
+.st-key-home-savings-card > [data-testid="stColumn"] {
+    border: 0;
+    border-radius: inherit;
+    padding: var(--sc-space-lg);
+}
+
+.stApp [data-testid="stForm"] {
+    background: var(--sc-card);
+    border-color: var(--sc-border);
+    border-radius: var(--sc-radius);
+}
+
+.stApp [data-testid="stExpander"] > details {
+    background: var(--sc-card);
+    border-color: var(--sc-border);
+    border-radius: var(--sc-radius);
+}
+
+.stApp [data-testid="stExpander"] > details > summary {
+    border-radius: var(--sc-radius);
+}
+
+/* Метрики */
+.stApp [data-testid="stMetric"] {
+    background: var(--sc-card);
+    border: 1px solid var(--sc-border);
+    border-radius: var(--sc-radius);
+    padding: var(--sc-space-md) var(--sc-space-lg);
+    box-shadow: var(--sc-shadow-sm);
+}
+
+.stApp [data-testid="stMetricLabel"] {
+    color: var(--sc-muted);
+}
+
+.stApp [data-testid="stMetricValue"] {
+    color: var(--sc-text);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+}
+
+/* Таблицы: обёртка доступна для стилизации, содержимое рисует Streamlit. */
+.stApp [data-testid="stDataFrame"] {
+    background: var(--sc-card);
+    border: 1px solid var(--sc-border);
+    border-radius: var(--sc-radius);
+    overflow: hidden;
+}
+
+.stApp [data-testid="stDataFrame"] iframe {
+    border-radius: var(--sc-radius);
+}
+
+.stApp [data-testid="stDataFrame"] [role="columnheader"] {
+    background: var(--sc-surface);
+    color: var(--sc-text);
+    font-weight: 600;
+}
+
+/* Кнопки и поля */
+.stApp [data-testid="stButton"] button,
+.stApp [data-testid="stFormSubmitButton"] button {
+    border-radius: var(--sc-radius);
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.stApp [data-testid^="stBaseButton-secondary"] {
+    background: var(--sc-card);
+    border-color: var(--sc-border);
+    color: var(--sc-text);
+}
+
+.stApp [data-testid^="stBaseButton-secondary"]:hover:not(:disabled),
+.stApp [data-testid^="stBaseButton-secondary"]:focus-visible:not(:disabled) {
+    background: var(--sc-surface);
+    border-color: var(--sc-primary);
+}
+
+.stApp [data-testid^="stBaseButton-secondary"]:active:not(:disabled) {
+    background: var(--sc-primary-soft);
+}
+
+.stApp [data-testid^="stBaseButton-secondary"]:disabled {
+    background: var(--sc-surface);
+    color: var(--sc-muted);
+}
+
+/* Сайдбар и текущая навигация через st.radio */
+.stApp [data-testid="stSidebar"] {
+    background: var(--sc-bg-soft);
+    border-right: 1px solid var(--sc-divider);
+}
+
+.stApp [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+    padding-top: var(--sc-space-md);
+}
+
+.stApp [data-testid="stSidebar"] [data-testid="stRadioGroup"] {
+    gap: 2px;
+}
+
+.stApp [data-testid="stSidebar"] [data-testid="stRadioOption"] {
+    display: block;
+    width: 100%;
+    padding: var(--sc-space-sm) var(--sc-space);
+    border-radius: var(--sc-radius-sm);
+    color: var(--sc-text-soft);
+    font-weight: 500;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.stApp [data-testid="stSidebar"] [data-testid="stRadioOption"]:hover {
+    background: var(--sc-surface);
+    color: var(--sc-text);
+}
+
+.stApp [data-testid="stSidebar"] [data-testid="stRadioOption"]:has(input:checked) {
+    background: var(--sc-primary-soft);
+    color: var(--sc-primary);
+}
+
+.stApp [data-testid="stSidebar"] [data-testid="stRadioOption"] [data-testid="stMarkdownContainer"] p {
+    color: inherit;
+}
+
+.stApp [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
+    color: var(--sc-muted);
+}
+
+/* Видимый keyboard focus */
+.stApp :is(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--sc-primary);
+    outline-offset: 2px;
+}
+
+.stApp [data-testid="stSidebar"] [data-testid="stRadioOption"]:has(input:focus-visible) {
+    outline: 2px solid var(--sc-primary);
+    outline-offset: 2px;
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+    .block-container {
+        padding-top: var(--sc-space-md);
+        padding-left: var(--sc-space);
+        padding-right: var(--sc-space);
+    }
+
+    .stApp h1 {
+        font-size: 1.9rem;
+    }
+
+    .stApp [data-testid="stMetric"] {
+        padding: var(--sc-space) var(--sc-space-md);
+    }
+
+    .st-key-home-menu-card > [data-testid="stColumn"],
+    .st-key-home-savings-card > [data-testid="stColumn"] {
+        padding: var(--sc-space-md);
+    }
+
+    .stApp [data-testid="stSidebar"] [data-testid="stRadioOption"] {
+        padding: var(--sc-space-sm) var(--sc-space-md);
+    }
+}
+
+@media (min-width: 1600px) {
+    .block-container {
+        max-width: 1320px;
+    }
+}
+
+/* Уважение к prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+    .stApp [data-testid="stButton"] button,
+    .stApp [data-testid="stFormSubmitButton"] button,
+    .stApp [data-testid="stSidebar"] [data-testid="stRadioOption"] {
+        transition: none;
+    }
+}

@@ -8,7 +8,7 @@ import os
 import urllib.error
 import urllib.request
 
-from domain.menu import COST_CEILING, _extract_costs, get_menu, validate_menu
+from domain.menu import COST_CEILING, DAY_NAMES, _extract_costs, _strict_bool, get_menu, validate_menu
 
 
 def _env(name, default=None):
@@ -83,12 +83,14 @@ def build_messages(context=None):
     system_prompt = load_system_prompt()
     user_prompt = (
         "Сформируй меню на 5 учебных дней на основе жалоб, отходов и ограничений. "
-        "Верни ТОЛЬКО JSON-массив из 5 объектов без пояснений и без Markdown. "
+        "Верни ТОЛЬКО JSON-массив из 5 объектов без пояснений, Markdown и таблиц. "
+        "Дни должны идти строго в порядке: Понедельник, Вторник, Среда, Четверг, Пятница. "
         "Каждый объект: "
         '{"day": "Понедельник", "dish_a": "...", "dish_b": "...", '
         '"complaint_cluster": "исходная формулировка жалобы", '
         '"dish_a_vegetarian": false, "dish_b_vegetarian": true}. '
-        "Требования: ровно 5 дней, в каждом дне 2 блюда, хотя бы одно вегетарианское, "
+        "Поля day, dish_a и dish_b — непустые строки, complaint_cluster — строка (может быть пустой), "        "dish_a_vegetarian и dish_b_vegetarian — boolean. "
+        "Требования: ровно 5 дней, в каждом дне 2 блюда; рекомендуется, чтобы хотя бы одно было вегетарианским, "
         f"себестоимость не выше {COST_CEILING} сом (цены не выдумывай). "
         "Сохраняй исходные формулировки жалоб. "
         "Данные:\n"
@@ -184,16 +186,38 @@ def parse_menu_response(text):
 
 
 def normalize_menu(data):
+    if not isinstance(data, (list, tuple)):
+        raise ValueError("AI response must be a list")
     menu = []
     for idx, item in enumerate(data):
         if not isinstance(item, dict):
             raise ValueError(f"item {idx} is not an object")
-        day = str(item.get("day", "")).strip()
-        dish_a = str(item.get("dish_a", "")).strip()
-        dish_b = str(item.get("dish_b", "")).strip()
-        cluster = str(item.get("complaint_cluster", "")).strip()
-        if not day or not dish_a or not dish_b:
-            raise ValueError(f"item {idx} missing required fields")
+        day = item.get("day")
+        if not isinstance(day, str) or not day.strip():
+            raise ValueError(f"item {idx} missing required field 'day'")
+        day = day.strip()
+        if day not in DAY_NAMES:
+            raise ValueError(f"item {idx} has invalid day '{day}'")
+        dish_a = item.get("dish_a")
+        if not isinstance(dish_a, str) or not dish_a.strip():
+            raise ValueError(f"item {idx} missing required field 'dish_a'")
+        dish_a = dish_a.strip()
+        dish_b = item.get("dish_b")
+        if not isinstance(dish_b, str) or not dish_b.strip():
+            raise ValueError(f"item {idx} missing required field 'dish_b'")
+        dish_b = dish_b.strip()
+        cluster = item.get("complaint_cluster")
+        if not isinstance(cluster, str):
+            raise ValueError(f"item {idx} missing required field 'complaint_cluster'")
+        cluster = cluster.strip()
+        try:
+            veg_a = _strict_bool(item.get("dish_a_vegetarian", False))
+        except ValueError as exc:
+            raise ValueError(f"item {idx} has invalid 'dish_a_vegetarian'") from exc
+        try:
+            veg_b = _strict_bool(item.get("dish_b_vegetarian", False))
+        except ValueError as exc:
+            raise ValueError(f"item {idx} has invalid 'dish_b_vegetarian'") from exc
         menu.append(
             {
                 "day": day,
@@ -201,10 +225,12 @@ def normalize_menu(data):
                 "dish_b": dish_b,
                 "complaint_cluster": cluster,
                 "cost_assumption_note": "не указано (проверить)",
-                "dish_a_vegetarian": bool(item.get("dish_a_vegetarian", False)),
-                "dish_b_vegetarian": bool(item.get("dish_b_vegetarian", False)),
+                "dish_a_vegetarian": veg_a,
+                "dish_b_vegetarian": veg_b,
             }
         )
+    if len(menu) == 5 and [item["day"] for item in menu] != DAY_NAMES:
+        raise ValueError("days must be Понедельник, Вторник, Среда, Четверг, Пятница in this order")
     return menu
 
 
