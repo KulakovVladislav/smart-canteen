@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Необязательный Telegram-бот для предзаказов (HTTP через стандартную библиотеку, без зависимостей)."""
 
+import html
 import json
 import logging
 import os
@@ -15,6 +16,8 @@ from domain.preorder import kitchen_summary
 from repositories.storage import get_orders, get_subscribers, save_order, subscribe_chat
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+WELCOME_IMAGE_URL = os.environ.get("CANTEEN_BOT_IMAGE_URL", "https://loremflickr.com/900/500/food,school?lock=2024")
 
 
 def get_bot_token():
@@ -80,12 +83,23 @@ def _flatten(payload, prefix=""):
     return result
 
 
-def send_message(token, chat_id, text, reply_markup=None, timeout=30):
-    payload = {"chat_id": chat_id, "text": text}
+def send_message(token, chat_id, text, reply_markup=None, parse_mode="HTML", timeout=30):
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode}
     if reply_markup is not None:
         payload["reply_markup"] = reply_markup if isinstance(reply_markup, str) else json.dumps(reply_markup,
                                                                                                 ensure_ascii=False)
     return api_call(token, "sendMessage", payload, timeout=timeout)
+
+
+def send_photo(token, chat_id, photo, caption=None, reply_markup=None, parse_mode="HTML", timeout=30):
+    payload = {"chat_id": chat_id, "photo": photo}
+    if caption is not None:
+        payload["caption"] = caption
+        payload["parse_mode"] = parse_mode
+    if reply_markup is not None:
+        payload["reply_markup"] = reply_markup if isinstance(reply_markup, str) else json.dumps(reply_markup,
+                                                                                                ensure_ascii=False)
+    return api_call(token, "sendPhoto", payload, timeout=timeout)
 
 
 def answer_callback(token, callback_query_id, text=None, timeout=30):
@@ -113,17 +127,20 @@ def build_order_keyboard(meal_date, db_path=None):
     day_name = day_for_date(meal_date if not isinstance(meal_date, str) else date.fromisoformat(meal_date))
     menu = get_active_menu(db_path)
     item = next((m for m in menu if m["day"] == day_name), None) if day_name else None
-    label_a = "Блюдо A"
-    label_b = "Блюдо B"
+    label_a = "🥗 Блюдо A"
+    label_b = "🍕 Блюдо B"
     if item:
-        label_a = f"A — {_short(item['dish_a'])}"
-        label_b = f"B — {_short(item['dish_b'])}"
+        veg_a = " 🌱" if item.get("dish_a_vegetarian") else ""
+        veg_b = " 🌱" if item.get("dish_b_vegetarian") else ""
+        label_a = f"🥗 A — {_short(item['dish_a'])}{veg_a}"
+        label_b = f"🍕 B — {_short(item['dish_b'])}{veg_b}"
     return {
         "inline_keyboard": [
             [
                 {"text": label_a, "callback_data": f"order:{meal_date if not hasattr(meal_date, 'isoformat') else meal_date.isoformat()}:A"},
                 {"text": label_b, "callback_data": f"order:{meal_date if not hasattr(meal_date, 'isoformat') else meal_date.isoformat()}:B"},
-            ]
+            ],
+            [{"text": "🏠 Главное меню", "callback_data": "nav:home"}],
         ]
     }
 
@@ -132,12 +149,12 @@ def menu_text_for_date(meal_date, db_path=None):
     day_name = day_for_date(meal_date)
     menu = get_active_menu(db_path)
     dstr = meal_date.isoformat() if hasattr(meal_date, "isoformat") else str(meal_date)
-    lines = [f"🍽️ Меню на {dstr} ({day_name or 'день'}):"]
+    lines = [f"🍽️ <b>Меню на {html.escape(dstr)} ({html.escape(day_name or 'день')})</b>:"]
     if day_name:
         item = next((m for m in menu if m["day"] == day_name), None)
         if item:
-            lines.append(f"  A — {item['dish_a']}")
-            lines.append(f"  B — {item['dish_b']}")
+            lines.append(f"  🥗 A — {html.escape(str(item['dish_a']))}")
+            lines.append(f"  🍕 B — {html.escape(str(item['dish_b']))}")
             veg = []
             if item.get("dish_a_vegetarian"):
                 veg.append("A")
@@ -149,8 +166,37 @@ def menu_text_for_date(meal_date, db_path=None):
             lines.append("Нажмите кнопку ниже, чтобы выбрать блюдо 👇")
             return "\n".join(lines)
     for m in menu:
-        lines.append(f"{m['day']}: A — {m['dish_a']} | B — {m['dish_b']}")
+        lines.append(f"{html.escape(str(m['day']))}: A — {html.escape(str(m['dish_a']))} | B — {html.escape(str(m['dish_b']))}")
     return "\n".join(lines)
+
+
+def build_main_keyboard(is_admin_user=False):
+    rows = [
+        [
+            {"text": "📋 Меню на завтра", "callback_data": "nav:menu"},
+            {"text": "🛒 Заказать", "callback_data": "nav:order"},
+        ],
+        [
+            {"text": "🧾 Мой заказ", "callback_data": "nav:myorder"},
+            {"text": "❓ Помощь", "callback_data": "nav:help"},
+        ],
+    ]
+    if is_admin_user:
+        rows.append([{"text": "📊 Сводка для кухни", "callback_data": "nav:summary"}])
+    rows.append([{"text": "🏠 Главное меню", "callback_data": "nav:home"}])
+    return {"inline_keyboard": rows}
+
+
+def _send_main_menu(chat_id, token, db_path=None, user_id=None):
+    keyboard = build_main_keyboard(is_admin(user_id) if user_id is not None else False)
+    caption = (
+        "🏠 <b>Главное меню</b>\n\n"
+        "Выберите действие кнопкой ниже 👇"
+    )
+    try:
+        send_photo(token, chat_id, WELCOME_IMAGE_URL, caption=caption, reply_markup=keyboard)
+    except Exception:
+        send_message(token, chat_id, caption, reply_markup=keyboard)
 
 
 def handle_update(update, token=None, db_path=None):
@@ -176,30 +222,115 @@ def handle_update(update, token=None, db_path=None):
             dish = parts[2].upper()
             if dish not in ("A", "B"):
                 if token:
-                    send_message(token, chat_id, "⚠️ Некорректный выбор.")
+                    send_message(token, chat_id, "⚠️ <b>Некорректный выбор.</b> Попробуйте снова.")
                 return
             try:
                 meal_date = date.fromisoformat(meal_date).isoformat()
             except ValueError:
                 if token:
-                    send_message(token, chat_id, "Неверный формат даты. Используйте YYYY-MM-DD.")
+                    send_message(token, chat_id, "⚠️ Неверный формат даты. Используйте YYYY-MM-DD.")
                 return
             try:
                 student_code = f"TG-{user_id}"
                 save_order(student_code, meal_date, dish, db_path=db_path)
                 if token:
-                    send_message(
-                        token,
-                        chat_id,
-                        f"✅ Заказ сохранён!\nДата: {meal_date}\nБлюдо: {dish}\n\n"
-                        "Можно изменить выбор до закрытия предзаказа.",
-                    )
+                    try:
+                        send_photo(
+                            token,
+                            chat_id,
+                            WELCOME_IMAGE_URL,
+                            caption=(
+                                f"✅ <b>Заказ сохранён!</b>\n"
+                                f"📅 Дата: {html.escape(meal_date)}\n"
+                                f"🍽️ Блюдо: <b>{html.escape(dish)}</b>\n\n"
+                                "Можно изменить выбор до закрытия предзаказа. 😊"
+                            ),
+                            reply_markup=build_main_keyboard(is_admin(user_id)),
+                        )
+                    except Exception:
+                        send_message(
+                            token,
+                            chat_id,
+                            f"✅ <b>Заказ сохранён!</b>\n"
+                            f"📅 Дата: {html.escape(meal_date)}\n"
+                            f"🍽️ Блюдо: <b>{html.escape(dish)}</b>\n\n"
+                            "Можно изменить выбор до закрытия предзаказа. 😊",
+                            reply_markup=build_main_keyboard(is_admin(user_id)),
+                        )
             except Exception as exc:
                 if token:
                     send_message(token, chat_id, f"Не удалось сохранить заказ: {exc}")
             return
+        if data.startswith("nav:"):
+            action = data.split(":", 1)[1]
+            if token:
+                if action in ("home", "start"):
+                    _send_main_menu(chat_id, token, db_path=db_path, user_id=user_id)
+                elif action == "menu":
+                    d = next_school_day()
+                    text_out = menu_text_for_date(d, db_path=db_path)
+                    keyboard = build_order_keyboard(d, db_path=db_path)
+                    try:
+                        send_photo(token, chat_id, WELCOME_IMAGE_URL, caption=text_out, reply_markup=keyboard)
+                    except Exception:
+                        send_message(token, chat_id, text_out, reply_markup=keyboard)
+                elif action == "order":
+                    d = next_school_day()
+                    caption = f"🛒 <b>Выберите блюдо на {html.escape(d.isoformat())}:</b>"
+                    keyboard = build_order_keyboard(d, db_path=db_path)
+                    try:
+                        send_photo(token, chat_id, WELCOME_IMAGE_URL, caption=caption, reply_markup=keyboard)
+                    except Exception:
+                        send_message(token, chat_id, caption, reply_markup=keyboard)
+                elif action == "myorder":
+                    d = next_school_day()
+                    orders = [o for o in get_orders(d.isoformat(), db_path=db_path) if o["student_code"] == f"TG-{user_id}"]
+                    keyboard = build_main_keyboard(is_admin(user_id))
+                    if orders:
+                        send_message(token, chat_id, f"✅ <b>Ваш заказ на {html.escape(d.isoformat())}:</b> блюдо <b>{html.escape(str(orders[0]['dish']))}</b> 🎉", reply_markup=keyboard)
+                    else:
+                        send_message(token, chat_id, f"ℹ️ Заказ на {html.escape(d.isoformat())} пока не оформлен. Используйте /order. 🛒", reply_markup=keyboard)
+                elif action == "help":
+                    keyboard = build_main_keyboard(is_admin(user_id))
+                    send_message(
+                        token,
+                        chat_id,
+                        "ℹ️ <b>Как пользоваться:</b>\n"
+                        "📋 /menu — посмотреть меню на завтра\n"
+                        "🛒 /order — выбрать блюдо (кнопками)\n"
+                        "🧾 /myorder — проверить свой заказ\n\n"
+                        "Заказ можно изменить до закрытия опроса.\n"
+                        "Администраторам доступна команда /summary YYYY-MM-DD. 🛠️",
+                        reply_markup=keyboard,
+                    )
+                elif action == "summary" and is_admin(user_id):
+                    d = date.today()
+                    expected = 500
+                    try:
+                        expected = int(os.environ.get("CANTEEN_EXPECTED_DINERS", "500"))
+                    except ValueError:
+                        expected = 500
+                    orders = get_orders(d.isoformat(), db_path=db_path)
+                    day_name = day_for_date(d)
+                    veg_letters = vegetarian_letters_for_day(day_name, menu=get_active_menu(db_path)) if day_name else []
+                    summary = kitchen_summary(orders, expected, veg_letters)
+                    text_out = (
+                        f"📊 <b>Сводка для кухни на {html.escape(d.isoformat())}</b>\n"
+                        f"🥗 Порций A: <b>{summary['a_orders']}</b>\n"
+                        f"🍕 Порций B: <b>{summary['b_orders']}</b>\n"
+                        f"🌱 Вегетарианских: <b>{summary['vegetarian_orders']}</b>\n"
+                        f"⏳ Не ответили: <b>{summary['unanswered']}</b>\n"
+                        f"📦 Базовые порции: <b>{summary['base_portions']}</b>\n"
+                        f"🛡️ Резерв {summary['buffer_percent']}%: <b>{summary['buffer']}</b>\n"
+                        f"✅ Итого порций: <b>{summary['total_portions']}</b>"
+                    )
+                    if summary["unknown_distribution"] > 0:
+                        text_out += f"\n⚠️ Распределение A/B для {summary['unknown_distribution']} не ответивших неизвестно."
+                    keyboard = build_main_keyboard(True)
+                    send_message(token, chat_id, text_out, reply_markup=keyboard)
+            return
         if token:
-            send_message(token, chat_id, "Неизвестная команда.")
+            send_message(token, chat_id, "🤔 Неизвестная команда. Напишите /help.")
         return
 
     chat_id = message.get("chat", {}).get("id")
@@ -215,59 +346,76 @@ def handle_update(update, token=None, db_path=None):
             except Exception:
                 pass
         if token:
-            send_message(
-                token,
-                chat_id,
-                "👋 Привет! Я бот предзаказа «Умной столовой».\n\n"
-                "Здесь можно выбрать обед на завтра за пару секунд.\n\n"
-                "Команды:\n"
-                "📋 /menu — меню на завтра\n"
-                "🛒 /order — выбрать блюдо\n"
-                "🧾 /myorder — мой заказ\n"
-                "❓ /help — помощь",
-            )
+            try:
+                send_photo(
+                    token,
+                    chat_id,
+                    WELCOME_IMAGE_URL,
+                    caption=(
+                        "👋 <b>Привет! Я бот предзаказа «Умной столовой».</b>\n\n"
+                        "Здесь можно выбрать обед на завтра за пару секунд 🚀\n\n"
+                        "Выберите действие кнопкой ниже 👇"
+                    ),
+                    reply_markup=build_main_keyboard(is_admin(user_id)),
+                )
+            except Exception:
+                send_message(
+                    token,
+                    chat_id,
+                    "👋 <b>Привет! Я бот предзаказа «Умной столовой».</b>\n\n"
+                    "Здесь можно выбрать обед на завтра за пару секунд 🚀\n\n"
+                    "Выберите действие кнопкой ниже 👇",
+                    reply_markup=build_main_keyboard(is_admin(user_id)),
+                )
         return
     if text.startswith("/help"):
         if token:
             send_message(
                 token,
                 chat_id,
-                "ℹ️ Как пользоваться:\n"
-                "/menu — посмотреть меню на завтра\n"
-                "/order — выбрать блюдо (кнопками)\n"
-                "/myorder — проверить свой заказ\n\n"
+                "ℹ️ <b>Как пользоваться:</b>\n"
+                "📋 /menu — посмотреть меню на завтра\n"
+                "🛒 /order — выбрать блюдо (кнопками)\n"
+                "🧾 /myorder — проверить свой заказ\n\n"
                 "Заказ можно изменить до закрытия опроса.\n"
-                "Администраторам доступна команда /summary YYYY-MM-DD.",
+                "Администраторам доступна команда /summary YYYY-MM-DD. 🛠️",
+                reply_markup=build_main_keyboard(is_admin(user_id)),
             )
         return
     if text.startswith("/menu"):
         d = next_school_day()
         if token:
-            send_message(token, chat_id, menu_text_for_date(d, db_path=db_path))
+            text_out = menu_text_for_date(d, db_path=db_path)
+            keyboard = build_order_keyboard(d, db_path=db_path)
+            try:
+                send_photo(token, chat_id, WELCOME_IMAGE_URL, caption=text_out, reply_markup=keyboard)
+            except Exception:
+                send_message(token, chat_id, text_out, reply_markup=keyboard)
         return
     if text.startswith("/order"):
         d = next_school_day()
         if token:
-            send_message(
-                token,
-                chat_id,
-                f"🛒 Выберите блюдо на {d.isoformat()}:",
-                reply_markup=build_order_keyboard(d, db_path=db_path),
-            )
+            caption = f"🛒 <b>Выберите блюдо на {html.escape(d.isoformat())}:</b>"
+            keyboard = build_order_keyboard(d, db_path=db_path)
+            try:
+                send_photo(token, chat_id, WELCOME_IMAGE_URL, caption=caption, reply_markup=keyboard)
+            except Exception:
+                send_message(token, chat_id, caption, reply_markup=keyboard)
         return
     if text.startswith("/myorder"):
         d = next_school_day()
         orders = [o for o in get_orders(d.isoformat(), db_path=db_path) if o["student_code"] == f"TG-{user_id}"]
         if token:
+            keyboard = build_main_keyboard(is_admin(user_id))
             if orders:
-                send_message(token, chat_id, f"✅ Ваш заказ на {d.isoformat()}: блюдо {orders[0]['dish']}.")
+                send_message(token, chat_id, f"✅ <b>Ваш заказ на {html.escape(d.isoformat())}:</b> блюдо <b>{html.escape(str(orders[0]['dish']))}</b> 🎉", reply_markup=keyboard)
             else:
-                send_message(token, chat_id, f"ℹ️ Заказ на {d.isoformat()} пока не оформлен. Используйте /order.")
+                send_message(token, chat_id, f"ℹ️ Заказ на {html.escape(d.isoformat())} пока не оформлен. Используйте /order. 🛒", reply_markup=keyboard)
         return
     if text.startswith("/summary"):
         if not is_admin(user_id):
             if token:
-                send_message(token, chat_id, "Доступ к сводке только для администраторов.")
+                send_message(token, chat_id, "🔒 Доступ к сводке только для администраторов.")
             return
         arg = text.split(maxsplit=1)
         if len(arg) > 1:
@@ -277,7 +425,7 @@ def handle_update(update, token=None, db_path=None):
                 d = _date.fromisoformat(arg[1].strip())
             except ValueError:
                 if token:
-                    send_message(token, chat_id, "Неверный формат даты. Используйте YYYY-MM-DD.")
+                    send_message(token, chat_id, "⚠️ Неверный формат даты. Используйте YYYY-MM-DD.")
                 return
         else:
             d = date.today()
@@ -291,22 +439,22 @@ def handle_update(update, token=None, db_path=None):
         veg_letters = vegetarian_letters_for_day(day_name, menu=get_active_menu(db_path)) if day_name else []
         summary = kitchen_summary(orders, expected, veg_letters)
         text_out = (
-            f"Дата: {d.isoformat()}\n"
-            f"Порций A: {summary['a_orders']}\n"
-            f"Порций B: {summary['b_orders']}\n"
-            f"Вегетарианских: {summary['vegetarian_orders']}\n"
-            f"Не ответили: {summary['unanswered']}\n"
-            f"Базовые порции: {summary['base_portions']}\n"
-            f"Резерв {summary['buffer_percent']}%: {summary['buffer']}\n"
-            f"Итого порций: {summary['total_portions']}"
+            f"📊 <b>Сводка для кухни на {html.escape(d.isoformat())}</b>\n"
+            f"🥗 Порций A: <b>{summary['a_orders']}</b>\n"
+            f"🍕 Порций B: <b>{summary['b_orders']}</b>\n"
+            f"🌱 Вегетарианских: <b>{summary['vegetarian_orders']}</b>\n"
+            f"⏳ Не ответили: <b>{summary['unanswered']}</b>\n"
+            f"📦 Базовые порции: <b>{summary['base_portions']}</b>\n"
+            f"🛡️ Резерв {summary['buffer_percent']}%: <b>{summary['buffer']}</b>\n"
+            f"✅ Итого порций: <b>{summary['total_portions']}</b>"
         )
         if summary["unknown_distribution"] > 0:
-            text_out += f"\nРаспределение A/B для {summary['unknown_distribution']} не ответивших неизвестно."
+            text_out += f"\n⚠️ Распределение A/B для {summary['unknown_distribution']} не ответивших неизвестно."
         if token:
             send_message(token, chat_id, text_out)
         return
     if token:
-        send_message(token, chat_id, "Неизвестная команда. /help")
+        send_message(token, chat_id, "🤔 Неизвестная команда. Напишите /help.")
 
 
 def run_bot(token=None, db_path=None, poll_timeout=20):
@@ -335,18 +483,19 @@ if __name__ == "__main__":
 
 def _kitchen_summary_text(orders, expected_diners, veg_letters, meal_date):
     summary = kitchen_summary(orders, expected_diners, veg_letters)
+    dstr = meal_date.isoformat() if hasattr(meal_date, "isoformat") else str(meal_date)
     text_out = (
-        f"Сводка для кухни на {meal_date.isoformat() if hasattr(meal_date, 'isoformat') else meal_date}:\n"
-        f"Порций A: {summary['a_orders']}\n"
-        f"Порций B: {summary['b_orders']}\n"
-        f"Вегетарианских: {summary['vegetarian_orders']}\n"
-        f"Не ответили: {summary['unanswered']}\n"
-        f"Базовые порции: {summary['base_portions']}\n"
-        f"Резерв {summary['buffer_percent']}%: {summary['buffer']}\n"
-        f"Итого порций: {summary['total_portions']}"
+        f"📊 <b>Сводка для кухни на {html.escape(dstr)}</b>\n"
+        f"🥗 Порций A: <b>{summary['a_orders']}</b>\n"
+        f"🍕 Порций B: <b>{summary['b_orders']}</b>\n"
+        f"🌱 Вегетарианских: <b>{summary['vegetarian_orders']}</b>\n"
+        f"⏳ Не ответили: <b>{summary['unanswered']}</b>\n"
+        f"📦 Базовые порции: <b>{summary['base_portions']}</b>\n"
+        f"🛡️ Резерв {summary['buffer_percent']}%: <b>{summary['buffer']}</b>\n"
+        f"✅ Итого порций: <b>{summary['total_portions']}</b>"
     )
     if summary["unknown_distribution"] > 0:
-        text_out += f"\nРаспределение A/B для {summary['unknown_distribution']} не ответивших неизвестно."
+        text_out += f"\n⚠️ Распределение A/B для {summary['unknown_distribution']} не ответивших неизвестно."
     return text_out
 
 
@@ -362,7 +511,10 @@ def broadcast_menu(token, meal_date=None, db_path=None):
     sent = 0
     for cid in chat_ids:
         try:
-            send_message(token, cid, text, reply_markup=keyboard)
+            try:
+                send_photo(token, cid, WELCOME_IMAGE_URL, caption=text, reply_markup=keyboard)
+            except Exception:
+                send_message(token, cid, text, reply_markup=keyboard)
             sent += 1
         except Exception:
             continue
