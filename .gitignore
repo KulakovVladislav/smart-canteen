@@ -10,3 +10,5 @@ repositories/data/*.db
 .env
 secrets.toml
 .idea/
+
+.pytest_cache/

@@ -7,10 +7,10 @@ import os
 import tempfile
 import unittest
 
-import repositories.sqlite.storage as sqlite_storage
-from domain.menu import MENU, get_active_menu
-from repositories.storage import init_db, save_menu
 import app
+import repositories.sqlite.storage as sqlite_storage
+from domain.menu import MENU
+from repositories.storage import init_db, save_menu
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 

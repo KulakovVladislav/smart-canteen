@@ -5,10 +5,11 @@ import os
 import tempfile
 import unittest
 
+from streamlit.testing.v1 import AppTest
+
 import repositories.sqlite.storage as sqlite_storage
 from domain.menu import MENU
-from repositories.storage import get_dish_costs, init_db, save_dish_cost
-from streamlit.testing.v1 import AppTest
+from repositories.storage import init_db
 from ui.streamlit import main as ui_main
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

@@ -19,10 +19,20 @@ def _env(name, default=None):
 
 
 def get_ai_config():
-    api_key = _env("AI_API_KEY") or _env("OPENAI_API_KEY") or _env("OPENROUTER_API_KEY")
-    base_url = _env("AI_BASE_URL") or _env("OPENAI_BASE_URL") or "https://api.openai.com/v1"
-    model = _env("AI_MODEL") or _env("OPENAI_MODEL") or "gpt-4o-mini"
-    provider = _env("AI_PROVIDER") or "openai-compatible"
+    api_key = _env("AI_API_KEY") or _env("OPENAI_API_KEY") or _env("OPENROUTER_API_KEY") or _env("GEMINI_API_KEY")
+    provider = _env("AI_PROVIDER")
+    if not provider:
+        # Автоопределение провайдера по формату ключа.
+        if api_key and str(api_key).startswith("AQ."):
+            provider = "gemini"
+        else:
+            provider = "openai-compatible"
+    if provider == "gemini":
+        base_url = _env("AI_BASE_URL") or "https://generativelanguage.googleapis.com/v1beta"
+        model = _env("AI_MODEL") or _env("GEMINI_MODEL") or "gemini-3.1-flash-lite"
+    else:
+        base_url = _env("AI_BASE_URL") or _env("OPENAI_BASE_URL") or "https://api.openai.com/v1"
+        model = _env("AI_MODEL") or _env("OPENAI_MODEL") or "gpt-4o-mini"
     return {
         "provider": provider,
         "api_key": api_key,
@@ -138,7 +148,8 @@ def _http_chat(messages, config, timeout=60, retries=2):
             if not content:
                 raise ValueError("empty content in API response")
             return content, parsed
-        except (urllib.error.URLError, urllib.error.HTTPError, socket.timeout, TimeoutError, json.JSONDecodeError) as exc:
+        except (urllib.error.URLError, urllib.error.HTTPError, socket.timeout, TimeoutError,
+                json.JSONDecodeError) as exc:
             last_exc = exc
             if isinstance(exc, urllib.error.HTTPError):
                 try:
@@ -156,6 +167,46 @@ def _http_chat(messages, config, timeout=60, retries=2):
             raise last_exc
     if last_exc is not None:  # pragma: no cover
         raise last_exc
+
+
+
+def _http_gemini(messages, config, timeout=60):
+    """Вызов нативного Gemini REST API (generateContent)."""
+    import urllib.request
+    import urllib.error
+    import json as _json
+
+    url = f"{config['base_url']}/models/{config['model']}:generateContent?key={config['api_key']}"
+    # Собираем текст из messages в один промпт (system + user).
+    parts = []
+    for m in messages:
+        role = m.get("role", "user")
+        content = m.get("content", "")
+        if role == "system":
+            parts.append("Системные инструкции:\n" + str(content))
+        else:
+            parts.append(str(content))
+    prompt = "\n\n".join(parts)
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.4},
+    }
+    data = _json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        raw = resp.read().decode("utf-8")
+    parsed = _json.loads(raw)
+    candidates = parsed.get("candidates") or []
+    if not candidates:
+        raise ValueError("empty candidates in Gemini response")
+    content = ""
+    for part in candidates[0].get("content", {}).get("parts", []):
+        if "text" in part:
+            content += part["text"]
+    if not content:
+        raise ValueError("empty content in Gemini response")
+    return content, parsed
+
 
 
 def parse_menu_response(text):
@@ -177,7 +228,7 @@ def parse_menu_response(text):
         start = raw.find("[")
         end = raw.rfind("]")
         if start != -1 and end != -1 and end > start:
-            data = json.loads(raw[start : end + 1])
+            data = json.loads(raw[start: end + 1])
         else:
             raise ValueError("invalid JSON in AI response") from exc
     if not isinstance(data, list):
@@ -259,7 +310,10 @@ def generate_menu(context=None, timeout=60):
     if context is None:
         context = build_context()
     messages = build_messages(context)
-    content, raw = _http_chat(messages, config, timeout=timeout)
+    if config["provider"] == "gemini":
+        content, raw = _http_gemini(messages, config, timeout=timeout)
+    else:
+        content, raw = _http_chat(messages, config, timeout=timeout)
     data = parse_menu_response(content)
     menu = normalize_menu(data)
     ok, errors = validate_menu(menu)

@@ -15,7 +15,6 @@ SCHOOL_DAYS_PER_YEAR = int(os.environ.get("CANTEEN_SCHOOL_DAYS_PER_YEAR", "175")
 WASTE_KG_PER_DAY = float(os.environ.get("CANTEEN_WASTE_KG_PER_DAY", "60"))
 WASTE_COST_PER_KG = float(os.environ.get("CANTEEN_WASTE_COST_PER_KG", "15"))
 
-
 REQUIRED_COLUMNS = {"day", "waste_percent"}
 
 

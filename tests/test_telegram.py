@@ -1,10 +1,11 @@
 import os
 import tempfile
 import unittest
-from datetime import date, timedelta
+from datetime import date
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import sys
+
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
@@ -56,8 +57,10 @@ class TestTelegram(unittest.TestCase):
         self.assertEqual(orders[0]["dish"], "A")
 
     def test_handle_update_upsert(self):
-        upd1 = {"callback_query": {"id": "1", "from": {"id": 1}, "message": {"chat": {"id": 1}}, "data": "order:2026-11-02:A"}}
-        upd2 = {"callback_query": {"id": "2", "from": {"id": 1}, "message": {"chat": {"id": 1}}, "data": "order:2026-11-02:B"}}
+        upd1 = {"callback_query": {"id": "1", "from": {"id": 1}, "message": {"chat": {"id": 1}},
+                                   "data": "order:2026-11-02:A"}}
+        upd2 = {"callback_query": {"id": "2", "from": {"id": 1}, "message": {"chat": {"id": 1}},
+                                   "data": "order:2026-11-02:B"}}
         handle_update(upd1, token=None, db_path=self.db)
         handle_update(upd2, token=None, db_path=self.db)
         from src.storage import get_orders

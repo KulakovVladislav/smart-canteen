@@ -1,19 +1,21 @@
 /* Умная столовая — дизайн-система Streamlit.
  *
- * Палитра совпадает с .streamlit/config.toml. Цветовые токены используют
- * light-dark() и наследуют color-scheme от контейнера Streamlit, поэтому
- * светлая и тёмная темы переключаются вместе с темой приложения.
- * В браузерах без light-dark() остаются светлые значения (тема по умолчанию).
+ * Палитра совпадает с .streamlit/config.toml. Шрифт: Space Grotesk для
+ * заголовков, Inter для текста. Токены используют light-dark() и наследуют
+ * color-scheme от .stApp, поэтому светлая/тёмная темы переключаются вместе.
  */
+
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap");
 
 :root {
     /* Типографика */
     --sc-font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --sc-heading-font: var(--sc-font);
-    --sc-text-base: 0.95rem;
-    --sc-text-sm: 0.85rem;
+    --sc-heading-font: "Space Grotesk", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --sc-text-base: 1rem;
+    --sc-text-sm: 0.875rem;
     --sc-text-xs: 0.78rem;
-    --sc-line-height: 1.55;
+    --sc-line-height: 1.6;
+    --sc-letter-tight: -0.02em;
 
     /* Отступы */
     --sc-space-xs: 4px;
@@ -21,14 +23,16 @@
     --sc-space: 12px;
     --sc-space-md: 16px;
     --sc-space-lg: 24px;
-    --sc-space-xl: 32px;
+    --sc-space-xl: 40px;
+    --sc-space-2xl: 64px;
 
     /* Радиусы */
     --sc-radius-sm: 8px;
     --sc-radius: 12px;
-    --sc-radius-lg: 16px;
+    --sc-radius-lg: 18px;
+    --sc-radius-xl: 24px;
 
-    /* Светлая тема — базовые значения и запасной вариант */
+    /* Светлая тема — базовые значения */
     --sc-bg: #f4f5f3;
     --sc-bg-soft: #eceee8;
     --sc-card: #ffffff;
@@ -43,30 +47,30 @@
     --sc-danger: #b33a2b;
     --sc-border: #d2d7d0;
     --sc-divider: #dde1da;
-    --sc-shadow-sm: 0 1px 2px rgba(27, 42, 38, 0.06);
-    --sc-shadow-md: 0 4px 12px rgba(27, 42, 38, 0.08);
+    --sc-shadow-sm: 0 1px 2px rgba(27, 42, 38, 0.05);
+    --sc-shadow-md: 0 8px 24px rgba(27, 42, 38, 0.08);
+    --sc-shadow-lg: 0 16px 40px rgba(27, 42, 38, 0.10);
 }
 
 @supports (color: light-dark(#ffffff, #000000)) {
-    /* Streamlit задаёт color-scheme на .stApp, поэтому токены разрешаются
-       именно на этом элементе и наследуются вглубь интерфейса. */
     .stApp {
-        --sc-bg: light-dark(#f4f5f3, #0f1412);
-        --sc-bg-soft: light-dark(#eceee8, #161b18);
-        --sc-card: light-dark(#ffffff, #181e1b);
-        --sc-surface: light-dark(#f7f8f5, #1c2320);
-        --sc-text: light-dark(#1b2a26, #e8efe9);
-        --sc-text-soft: light-dark(#3d4f48, #c7d3cc);
-        --sc-muted: light-dark(#5a6a62, #a0ada6);
-        --sc-primary: light-dark(#0f5b4f, #1fb08a);
-        --sc-primary-soft: light-dark(#e8f4f1, #1a4a3f);
-        --sc-success: light-dark(#1f8a5a, #2fb978);
-        --sc-warning: light-dark(#9a6f1f, #e0a84b);
+        --sc-bg: light-dark(#f4f5f3, #111418);
+        --sc-bg-soft: light-dark(#eceee8, #1a1e24);
+        --sc-card: light-dark(#ffffff, #181c22);
+        --sc-surface: light-dark(#f7f8f5, #1f242b);
+        --sc-text: light-dark(#1b2a26, #e6e8ec);
+        --sc-text-soft: light-dark(#3d4f48, #b8bec7);
+        --sc-muted: light-dark(#5a6a62, #8a93a0);
+        --sc-primary: light-dark(#0f5b4f, #2a9d8f);
+        --sc-primary-soft: light-dark(#e8f4f1, #1a3a36);
+        --sc-success: light-dark(#1f8a5a, #3bb273);
+        --sc-warning: light-dark(#9a6f1f, #d4a04a);
         --sc-danger: light-dark(#b33a2b, #e06a5a);
-        --sc-border: light-dark(#d2d7d0, #3a433e);
-        --sc-divider: light-dark(#dde1da, #2f3632);
-        --sc-shadow-sm: 0 1px 2px light-dark(rgba(27, 42, 38, 0.06), rgba(0, 0, 0, 0.4));
-        --sc-shadow-md: 0 4px 12px light-dark(rgba(27, 42, 38, 0.08), rgba(0, 0, 0, 0.5));
+        --sc-border: light-dark(#d2d7d0, #2b313a);
+        --sc-divider: light-dark(#dde1da, #232830);
+        --sc-shadow-sm: 0 1px 2px light-dark(rgba(27, 42, 38, 0.05), rgba(0, 0, 0, 0.4));
+        --sc-shadow-md: 0 8px 24px light-dark(rgba(27, 42, 38, 0.08), rgba(0, 0, 0, 0.5));
+        --sc-shadow-lg: 0 16px 40px light-dark(rgba(27, 42, 38, 0.10), rgba(0, 0, 0, 0.6));
     }
 }
 
@@ -75,37 +79,48 @@
     background: var(--sc-bg);
     color: var(--sc-text);
     font-family: var(--sc-font);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 .block-container {
-    max-width: 1200px;
+    max-width: 1180px;
     padding-top: var(--sc-space-xl);
     padding-bottom: calc(var(--sc-space-xl) + var(--sc-space-lg));
+    padding-left: var(--sc-space-lg);
+    padding-right: var(--sc-space-lg);
 }
 
+/* Типографика */
 .stApp h1,
 .stApp h2,
 .stApp h3,
 .stApp h4 {
     color: var(--sc-text);
     font-family: var(--sc-heading-font);
-    letter-spacing: -0.015em;
+    letter-spacing: var(--sc-letter-tight);
+    font-weight: 600;
 }
 
 .stApp h1 {
-    font-size: clamp(2rem, 3.2vw, 2.7rem);
-    line-height: 1.1;
+    font-size: clamp(2.1rem, 3.6vw, 3rem);
+    line-height: 1.05;
     margin-bottom: var(--sc-space-sm);
+    font-weight: 700;
 }
 
 .stApp h2 {
-    font-size: clamp(1.35rem, 2vw, 1.7rem);
-    line-height: 1.2;
+    font-size: clamp(1.4rem, 2vw, 1.85rem);
+    line-height: 1.15;
+    margin-top: var(--sc-space-lg);
+    margin-bottom: var(--sc-space-sm);
 }
 
 .stApp h3 {
     font-size: 1.15rem;
     line-height: 1.3;
+    margin-top: var(--sc-space-md);
+    margin-bottom: var(--sc-space-xs);
 }
 
 .stApp [data-testid="stMarkdownContainer"] > p,
@@ -113,44 +128,49 @@
 .stApp [data-testid="stMarkdownContainer"] > ol > li {
     color: var(--sc-text-soft);
     line-height: var(--sc-line-height);
+    max-width: 72ch;
 }
 
 .stApp [data-testid="stCaptionContainer"] {
     color: var(--sc-muted);
     font-size: var(--sc-text-sm);
+    line-height: 1.5;
 }
 
-/* Карточки */
-.st-key-home-menu-card,
-.st-key-home-savings-card {
+/* Карточки: контейнеры с border=True */
+.stApp [data-testid="stVerticalBlockBorderWrapper"] {
     background: var(--sc-card);
     border: 1px solid var(--sc-border);
     border-radius: var(--sc-radius-lg);
     box-shadow: var(--sc-shadow-sm);
-    overflow: hidden;
+    padding: var(--sc-space-lg);
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
-.st-key-home-menu-card > [data-testid="stColumn"],
-.st-key-home-savings-card > [data-testid="stColumn"] {
-    border: 0;
-    border-radius: inherit;
-    padding: var(--sc-space-lg);
+.stApp [data-testid="stVerticalBlockBorderWrapper"]:hover {
+    box-shadow: var(--sc-shadow-md);
+    border-color: var(--sc-divider);
 }
 
 .stApp [data-testid="stForm"] {
     background: var(--sc-card);
-    border-color: var(--sc-border);
+    border: 1px solid var(--sc-border);
     border-radius: var(--sc-radius);
+    padding: var(--sc-space-lg);
+    box-shadow: var(--sc-shadow-sm);
 }
 
 .stApp [data-testid="stExpander"] > details {
     background: var(--sc-card);
-    border-color: var(--sc-border);
+    border: 1px solid var(--sc-border);
     border-radius: var(--sc-radius);
+    box-shadow: var(--sc-shadow-sm);
 }
 
 .stApp [data-testid="stExpander"] > details > summary {
     border-radius: var(--sc-radius);
+    font-weight: 500;
+    color: var(--sc-text);
 }
 
 /* Метрики */
@@ -164,37 +184,57 @@
 
 .stApp [data-testid="stMetricLabel"] {
     color: var(--sc-muted);
+    font-size: var(--sc-text-xs);
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0;
 }
 
 .stApp [data-testid="stMetricValue"] {
     color: var(--sc-text);
+    font-family: var(--sc-heading-font);
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.02em;
+    font-weight: 600;
 }
 
-/* Таблицы: обёртка доступна для стилизации, содержимое рисует Streamlit. */
+/* Таблицы */
 .stApp [data-testid="stDataFrame"] {
     background: var(--sc-card);
     border: 1px solid var(--sc-border);
     border-radius: var(--sc-radius);
     overflow: hidden;
+    box-shadow: var(--sc-shadow-sm);
 }
 
 .stApp [data-testid="stDataFrame"] iframe {
     border-radius: var(--sc-radius);
 }
 
-.stApp [data-testid="stDataFrame"] [role="columnheader"] {
-    background: var(--sc-surface);
-    color: var(--sc-text);
-    font-weight: 600;
-}
-
-/* Кнопки и поля */
+/* Кнопки */
 .stApp [data-testid="stButton"] button,
 .stApp [data-testid="stFormSubmitButton"] button {
     border-radius: var(--sc-radius);
-    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    font-weight: 500;
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
+}
+
+.stApp [data-testid="stButton"] button:active:not(:disabled),
+.stApp [data-testid="stFormSubmitButton"] button:active:not(:disabled) {
+    transform: translateY(1px);
+}
+
+.stApp [data-testid^="stBaseButton-primary"] {
+    background: var(--sc-primary);
+    border-color: var(--sc-primary);
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(15, 91, 79, 0.25);
+}
+
+.stApp [data-testid^="stBaseButton-primary"]:hover:not(:disabled) {
+    background: #0c4d43;
+    border-color: #0c4d43;
+    box-shadow: 0 4px 12px rgba(15, 91, 79, 0.3);
 }
 
 .stApp [data-testid^="stBaseButton-secondary"] {
@@ -207,6 +247,7 @@
 .stApp [data-testid^="stBaseButton-secondary"]:focus-visible:not(:disabled) {
     background: var(--sc-surface);
     border-color: var(--sc-primary);
+    color: var(--sc-primary);
 }
 
 .stApp [data-testid^="stBaseButton-secondary"]:active:not(:disabled) {
@@ -218,14 +259,56 @@
     color: var(--sc-muted);
 }
 
-/* Сайдбар и текущая навигация через st.radio */
+/* Поля ввода */
+.stApp [data-testid="stTextInput"] input,
+.stApp [data-testid="stNumberInput"] input,
+.stApp [data-testid="stDateInput"] input,
+.stApp [data-testid="stTextArea"] textarea {
+    border-radius: var(--sc-radius-sm);
+    border-color: var(--sc-border);
+    background: var(--sc-card);
+    color: var(--sc-text);
+}
+
+.stApp [data-testid="stTextInput"] input:focus,
+.stApp [data-testid="stNumberInput"] input:focus,
+.stApp [data-testid="stDateInput"] input:focus,
+.stApp [data-testid="stTextArea"] textarea:focus {
+    border-color: var(--sc-primary);
+    box-shadow: 0 0 0 2px var(--sc-primary-soft);
+}
+
+/* Радио / селект */
+.stApp [data-testid="stRadio"] [data-testid="stMarkdownContainer"] p {
+    color: var(--sc-text-soft);
+}
+
+/* Сайдбар */
+.stApp [data-testid="stSidebar"],
+.stApp section[data-testid="stSidebar"],
+.stApp [data-testid="stSidebar"] > div {
+    background: var(--sc-bg-soft) !important;
+}
+
 .stApp [data-testid="stSidebar"] {
-    background: var(--sc-bg-soft);
     border-right: 1px solid var(--sc-divider);
 }
 
-.stApp [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+.stApp [data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+    background: var(--sc-bg-soft) !important;
     padding-top: var(--sc-space-md);
+    padding-bottom: var(--sc-space-lg);
+}
+
+.stApp [data-testid="stSidebar"] [data-testid="stSidebarHeader"] {
+    background: var(--sc-bg-soft) !important;
+    padding-bottom: var(--sc-space-sm);
+}
+
+.stApp [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+    background: var(--sc-bg-soft) !important;
+    padding-top: var(--sc-space-md);
+    padding-bottom: var(--sc-space-lg);
 }
 
 .stApp [data-testid="stSidebar"] [data-testid="stRadioGroup"] {
@@ -233,23 +316,34 @@
 }
 
 .stApp [data-testid="stSidebar"] [data-testid="stRadioOption"] {
-    display: block;
-    width: 100%;
-    padding: var(--sc-space-sm) var(--sc-space);
-    border-radius: var(--sc-radius-sm);
-    color: var(--sc-text-soft);
-    font-weight: 500;
+    display: block !important;
+    width: 100% !important;
+    padding: var(--sc-space-sm) var(--sc-space) !important;
+    border-radius: var(--sc-radius-sm) !important;
+    color: var(--sc-text-soft) !important;
+    font-weight: 500 !important;
+    background: transparent !important;
     transition: background-color 0.15s ease, color 0.15s ease;
 }
 
+.stApp [data-testid="stSidebar"] [data-testid="stRadioOption"] input[type="radio"] {
+    position: absolute !important;
+    opacity: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+    margin: 0 !important;
+    pointer-events: none !important;
+}
+
 .stApp [data-testid="stSidebar"] [data-testid="stRadioOption"]:hover {
-    background: var(--sc-surface);
-    color: var(--sc-text);
+    background: var(--sc-surface) !important;
+    color: var(--sc-text) !important;
 }
 
 .stApp [data-testid="stSidebar"] [data-testid="stRadioOption"]:has(input:checked) {
-    background: var(--sc-primary-soft);
-    color: var(--sc-primary);
+    background: var(--sc-primary-soft) !important;
+    color: var(--sc-primary) !important;
+    font-weight: 600 !important;
 }
 
 .stApp [data-testid="stSidebar"] [data-testid="stRadioOption"] [data-testid="stMarkdownContainer"] p {
@@ -260,10 +354,18 @@
     color: var(--sc-muted);
 }
 
-/* Видимый keyboard focus */
+/* Brand block in sidebar */
+.stApp [data-testid="stSidebar"] h3 {
+    color: var(--sc-primary);
+    font-size: 1.1rem;
+    margin-bottom: var(--sc-space-xs);
+}
+
+/* Focus */
 .stApp :is(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
     outline: 2px solid var(--sc-primary);
     outline-offset: 2px;
+    border-radius: var(--sc-radius-sm);
 }
 
 .stApp [data-testid="stSidebar"] [data-testid="stRadioOption"]:has(input:focus-visible) {
@@ -277,6 +379,7 @@
         padding-top: var(--sc-space-md);
         padding-left: var(--sc-space);
         padding-right: var(--sc-space);
+        padding-bottom: var(--sc-space-xl);
     }
 
     .stApp h1 {
@@ -287,13 +390,12 @@
         padding: var(--sc-space) var(--sc-space-md);
     }
 
-    .st-key-home-menu-card > [data-testid="stColumn"],
-    .st-key-home-savings-card > [data-testid="stColumn"] {
+    .stApp [data-testid="stVerticalBlockBorderWrapper"] {
         padding: var(--sc-space-md);
     }
 
-    .stApp [data-testid="stSidebar"] [data-testid="stRadioOption"] {
-        padding: var(--sc-space-sm) var(--sc-space-md);
+    .stApp [data-testid="stForm"] {
+        padding: var(--sc-space-md);
     }
 }
 
@@ -307,7 +409,26 @@
 @media (prefers-reduced-motion: reduce) {
     .stApp [data-testid="stButton"] button,
     .stApp [data-testid="stFormSubmitButton"] button,
-    .stApp [data-testid="stSidebar"] [data-testid="stRadioOption"] {
+    .stApp [data-testid="stSidebar"] [data-testid="stRadioOption"],
+    .stApp [data-testid="stVerticalBlockBorderWrapper"] {
         transition: none;
+    }
+}
+
+/* Тонкая анимация появления основного контента (один раз) */
+@media (prefers-reduced-motion: no-preference) {
+    .block-container {
+        animation: sc-fade-in 0.28s ease-out;
+    }
+}
+
+@keyframes sc-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
     }
 }

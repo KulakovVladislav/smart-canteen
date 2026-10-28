@@ -2,7 +2,6 @@
 """Регрессионные тесты контракта AI-меню и сохранения меню."""
 
 import os
-import sqlite3
 import tempfile
 import unittest
 

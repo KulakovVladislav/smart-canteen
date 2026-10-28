@@ -166,7 +166,8 @@ def _extract_costs(costs, menu):
         if costs and isinstance(costs[0], dict) and "day" in costs[0]:
             by_day = {c["day"]: c for c in costs}
             return [(item["day"], *_cost_pair(by_day.get(item["day"]))) for item in menu]
-        if costs and isinstance(costs[0], (list, tuple)) and len(costs[0]) >= 2 and isinstance(costs[0][0], str) and costs[0][0] in days:
+        if costs and isinstance(costs[0], (list, tuple)) and len(costs[0]) >= 2 and isinstance(costs[0][0], str) and \
+                costs[0][0] in days:
             by_day = {}
             for c in costs:
                 if isinstance(c, (list, tuple)) and len(c) >= 2 and isinstance(c[0], str):
@@ -208,7 +209,10 @@ def check_budget(costs=None, limit: int = COST_CEILING, menu=None) -> dict:
                 "day": day,
                 "dish": dish,
                 "cost": cost,
-                "cost_display": cost if cost is not None and cost != "не указано" else "не указано",
+                "cost_display": "не указано" if cost is None or cost == "не указано" else (
+                    str(int(cost)) if isinstance(cost, (int, float)) and not isinstance(cost, bool) and float(
+                        cost).is_integer() else str(cost)
+                ),
                 "status": st,
             })
             label = f"{day} / блюдо {dish}"
@@ -276,9 +280,9 @@ def is_vegetarian_dish(day, dish, menu=None):
     for item in menu:
         if item["day"] == day:
             if dish == "A":
-                return bool(item.get("dish_a_vegetarian", False))
+                return _strict_bool(item.get("dish_a_vegetarian", False))
             if dish == "B":
-                return bool(item.get("dish_b_vegetarian", False))
+                return _strict_bool(item.get("dish_b_vegetarian", False))
     return False
 
 
@@ -288,11 +292,12 @@ def vegetarian_letters_for_day(day, menu=None):
     result = []
     for item in menu:
         if item["day"] == day:
-            if item.get("dish_a_vegetarian"):
+            if _strict_bool(item.get("dish_a_vegetarian", False)):
                 result.append("A")
-            if item.get("dish_b_vegetarian"):
+            if _strict_bool(item.get("dish_b_vegetarian", False)):
                 result.append("B")
     return result
+
 
 _DEPRECATED_ALIASES = {
     "validate": validate_menu,

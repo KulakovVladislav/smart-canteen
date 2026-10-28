@@ -4,8 +4,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 BUFFER_PERCENT = 5
 VALID_CHOICES = {"A", "B"}
@@ -98,11 +97,11 @@ def _shares_from_choice(default_choice):
 
 
 def count_preorders(
-    choices=None,
-    default_choice=None,
-    buffer_percent=BUFFER_PERCENT,
-    historical_shares=None,
-    vegetarian_letters=None,
+        choices=None,
+        default_choice=None,
+        buffer_percent=BUFFER_PERCENT,
+        historical_shares=None,
+        vegetarian_letters=None,
 ):
     """Count preorder choices and compute portions with a safety buffer.
 
@@ -247,7 +246,8 @@ SAMPLE_PREORDERS = [
 ]
 
 
-def kitchen_summary(orders, expected_diners, vegetarian_letters=None, buffer_percent=BUFFER_PERCENT, historical_shares=None, default_choice=None):
+def kitchen_summary(orders, expected_diners, vegetarian_letters=None, buffer_percent=BUFFER_PERCENT,
+                    historical_shares=None, default_choice=None):
     orders = list(orders) if orders else []
     veg_letters = {str(x).upper() for x in (vegetarian_letters or [])}
     a_orders = sum(1 for o in orders if str(o.get("dish", "")).upper() == "A")
@@ -306,6 +306,8 @@ def kitchen_summary(orders, expected_diners, vegetarian_letters=None, buffer_per
         "b_distribution_known": b_orders,
         "unknown_distribution": unknown_distribution,
     })
+
+
 _DEPRECATED_ALIASES = {
     "counts": count_preorders,
     "parse": count_preorders,

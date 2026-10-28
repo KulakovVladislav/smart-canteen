@@ -4,7 +4,7 @@
 import os
 import re
 import sys
-from datetime import date, timedelta
+from datetime import date
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if ROOT not in sys.path:
@@ -17,18 +17,14 @@ from services.ai_menu import (
     demo_template_menu,
     generate_menu,
     get_ai_config,
-    is_configured,
     validate_ai_menu,
 )
 from domain.economics import waste_report
 from domain.menu import (
     COST_CEILING,
-    DAY_NAMES,
     check_budget,
     get_active_menu,
-    get_menu,
     day_for_date,
-    is_vegetarian_dish,
     validate_menu,
     vegetarian_letters_for_day,
 )
@@ -49,7 +45,6 @@ from repositories.storage import (
 )
 
 st.set_page_config(page_title="Умная столовая", page_icon="🍽️", layout="wide")
-
 
 STUDENT_CODE_RE = re.compile(r"^[A-Za-z0-9-]{3,20}$")
 
@@ -195,7 +190,10 @@ def page_menu():
                     "Блюдо": f"{letter} — {dish_name}",
                     "Вегетарианское": "Да" if veg else "Нет",
                     "Жалоба": m["complaint_cluster"],
-                    "Стоимость, сом": "не указано" if cost is None else cost,
+                    "Стоимость, сом": "не указано" if cost is None else (
+                        str(int(cost)) if isinstance(cost, (int, float)) and not isinstance(cost, bool) and float(
+                            cost).is_integer() else str(cost)
+                    ),
                 }
             )
     st.dataframe(
@@ -249,7 +247,8 @@ def page_preorder():
             try:
                 with st.spinner("Сохранение..."):
                     save_order(student_code.strip(), meal_date.isoformat(), dish)
-                st.success("Заказ сохранён. Повторный выбор того же кода на эту дату обновит заказ, а не создаст дубликат.")
+                st.success(
+                    "Заказ сохранён. Повторный выбор того же кода на эту дату обновит заказ, а не создаст дубликат.")
             except ValueError as exc:
                 st.error(str(exc))
 
@@ -285,7 +284,8 @@ def page_kitchen():
     counts = count_orders(date_str)
     day_name = day_for_date(meal_date)
     veg_letters = vegetarian_letters_for_day(day_name, menu=get_active_menu()) if day_name else []
-    summary = kitchen_summary(counts["orders"], expected, veg_letters, historical_shares=None, default_choice=historical)
+    summary = kitchen_summary(counts["orders"], expected, veg_letters, historical_shares=None,
+                              default_choice=historical)
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Заказов A", summary["a_orders"])
@@ -317,6 +317,25 @@ def page_kitchen():
 
     if summary["total_orders"] == 0:
         st.info("Заказов на дату пока нет. Загрузите тестовые данные ниже или дождитесь предзаказов.")
+    with st.expander("Telegram-рассылка (утренняя процедура)"):
+        import os
+
+        token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+        if not token:
+            st.info("TELEGRAM_BOT_TOKEN не задан: рассылка недоступна.")
+        else:
+            if st.button("Отправить утреннюю рассылку сейчас", key="tg_broadcast_now"):
+                try:
+                    from services.telegram_bot import run_daily_job
+
+                    result = run_daily_job()
+                    st.success(
+                        f"Меню отправлено: {result['menu_sent']}; сводка отправлена: {result['summary_sent']}."
+                    )
+                except Exception as exc:
+                    st.error(f"Не удалось выполнить рассылку: {exc}")
+            st.caption("Планировщик: python bot.py schedule (по умолчанию в 09:00).")
+
     with st.expander("Тестовые данные"):
         if st.button("Загрузить тестовые заказы на выбранную дату"):
             try:
@@ -383,7 +402,8 @@ def page_leftovers():
         if masses:
             avg = sum(masses) / len(masses)
             st.metric("Средняя масса отходов по записям, кг", f"{avg:.1f}")
-            st.caption("Базовая оценка кейса — около 60 кг/день. Сравнение возможно только при достаточном числе записей.")
+            st.caption(
+                "Базовая оценка кейса — около 60 кг/день. Сравнение возможно только при достаточном числе записей.")
     else:
         st.info("Записей пока нет. Внесите первый результат после обеда.")
 
@@ -539,7 +559,8 @@ def page_ai():
     if config["configured"]:
         st.success(f"Провайдер настроен: {config['provider']} / {config['model']}")
     else:
-        st.warning("AI-провайдер не настроен. Задайте AI_API_KEY (или OPENAI_API_KEY). Приложение продолжает работать на сохранённом меню.")
+        st.warning(
+            "AI-провайдер не настроен. Задайте AI_API_KEY (или OPENAI_API_KEY). Приложение продолжает работать на сохранённом меню.")
 
     col1, col2 = st.columns(2)
     generate_clicked = col1.button("Сформировать предложение меню")
@@ -618,6 +639,7 @@ def page_ai():
 
 PAGES = ["Главная", "Меню", "Предзаказ", "Кухня", "Остатки", "Экономика", "Проверка бюджета", "AI-меню"]
 
+
 def main():
     init_db()
     if "page" not in st.session_state:
@@ -625,14 +647,26 @@ def main():
         st.session_state["page"] = qp if qp in PAGES else "Главная"
     with st.sidebar:
         st.markdown("### 🍽️ Умная столовая")
-        st.caption("Демонстрационный прототип")
+        st.caption("Планирование меню, предзаказ и экономика столовой")
         st.divider()
-        page = st.radio(
-            "Раздел",
-            PAGES,
-            key="page",
-            label_visibility="collapsed",
-        )
+        page = st.session_state.get("page", "Главная")
+        if page not in PAGES:
+            page = "Главная"
+            st.session_state["page"] = page
+        for item in PAGES:
+            if st.button(
+                    item,
+                    key=f"nav_{item}",
+                    type="primary" if item == page else "secondary",
+                    width="stretch",
+            ):
+                st.session_state["page"] = item
+                page = item
+                try:
+                    st.query_params["page"] = item
+                except Exception:
+                    pass
+                st.rerun()
         try:
             st.query_params["page"] = page
         except Exception:

@@ -33,55 +33,142 @@ def init_db(db_path=None):
     try:
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS orders (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                student_code TEXT NOT NULL,
-                meal_date TEXT NOT NULL,
-                dish TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                UNIQUE(student_code, meal_date)
+            CREATE TABLE IF NOT EXISTS orders
+            (
+                id
+                INTEGER
+                PRIMARY
+                KEY
+                AUTOINCREMENT,
+                student_code
+                TEXT
+                NOT
+                NULL,
+                meal_date
+                TEXT
+                NOT
+                NULL,
+                dish
+                TEXT
+                NOT
+                NULL,
+                created_at
+                TEXT
+                NOT
+                NULL,
+                updated_at
+                TEXT
+                NOT
+                NULL,
+                UNIQUE
+            (
+                student_code,
+                meal_date
+            )
+                )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS dish_costs
+            (
+                day
+                TEXT
+                NOT
+                NULL,
+                dish
+                TEXT
+                NOT
+                NULL,
+                cost
+                REAL,
+                updated_at
+                TEXT
+                NOT
+                NULL,
+                PRIMARY
+                KEY
+            (
+                day,
+                dish
+            )
+                )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS leftovers
+            (
+                id
+                INTEGER
+                PRIMARY
+                KEY
+                AUTOINCREMENT,
+                record_date
+                TEXT
+                NOT
+                NULL,
+                waste_mass_kg
+                REAL,
+                leftover_portions
+                INTEGER,
+                note
+                TEXT,
+                created_at
+                TEXT
+                NOT
+                NULL
             )
             """
         )
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS dish_costs (
-                day TEXT NOT NULL,
-                dish TEXT NOT NULL,
-                cost REAL,
-                updated_at TEXT NOT NULL,
-                PRIMARY KEY (day, dish)
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS leftovers (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                record_date TEXT NOT NULL,
-                waste_mass_kg REAL,
-                leftover_portions INTEGER,
-                note TEXT,
-                created_at TEXT NOT NULL
-            )
-            """
-        )
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS menu_items (
-                day TEXT PRIMARY KEY,
-                dish_a TEXT NOT NULL,
-                dish_b TEXT NOT NULL,
-                complaint_cluster TEXT,
-                dish_a_vegetarian INTEGER NOT NULL DEFAULT 0,
-                dish_b_vegetarian INTEGER NOT NULL DEFAULT 0,
-                updated_at TEXT NOT NULL
+            CREATE TABLE IF NOT EXISTS menu_items
+            (
+                day
+                TEXT
+                PRIMARY
+                KEY,
+                dish_a
+                TEXT
+                NOT
+                NULL,
+                dish_b
+                TEXT
+                NOT
+                NULL,
+                complaint_cluster
+                TEXT,
+                dish_a_vegetarian
+                INTEGER
+                NOT
+                NULL
+                DEFAULT
+                0,
+                dish_b_vegetarian
+                INTEGER
+                NOT
+                NULL
+                DEFAULT
+                0,
+                updated_at
+                TEXT
+                NOT
+                NULL
             )
             """
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_orders_meal_date ON orders(meal_date)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_leftovers_record_date ON leftovers(record_date)")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS telegram_subscribers
+            (
+                chat_id    TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
         conn.commit()
     finally:
         conn.close()
@@ -112,8 +199,8 @@ def save_order(student_code, meal_date, dish, db_path=None):
         conn.execute(
             """
             INSERT INTO orders (student_code, meal_date, dish, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(student_code, meal_date) DO UPDATE SET
+            VALUES (?, ?, ?, ?, ?) ON CONFLICT(student_code, meal_date) DO
+            UPDATE SET
                 dish = excluded.dish,
                 updated_at = excluded.updated_at
             """,
@@ -169,8 +256,8 @@ def save_dish_cost(day, dish, cost, db_path=None):
         conn.execute(
             """
             INSERT INTO dish_costs (day, dish, cost, updated_at)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(day, dish) DO UPDATE SET
+            VALUES (?, ?, ?, ?) ON CONFLICT(day, dish) DO
+            UPDATE SET
                 cost = excluded.cost,
                 updated_at = excluded.updated_at
             """,
@@ -259,7 +346,8 @@ def get_leftovers(db_path=None, limit=None):
         conn.close()
 
 
-from domain.menu import DAY_NAMES, MENU, _strict_bool, validate_menu
+from domain.menu import MENU, _strict_bool, validate_menu
+
 
 def save_menu(menu, db_path=None):
     ok, errors = validate_menu(menu)
@@ -272,7 +360,8 @@ def save_menu(menu, db_path=None):
         for item in menu:
             conn.execute(
                 """
-                INSERT INTO menu_items (day, dish_a, dish_b, complaint_cluster, dish_a_vegetarian, dish_b_vegetarian, updated_at)
+                INSERT INTO menu_items (day, dish_a, dish_b, complaint_cluster, dish_a_vegetarian, dish_b_vegetarian,
+                                        updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
@@ -335,23 +424,40 @@ def get_saved_menu(db_path=None):
                     "dish_b_vegetarian": bool(r["dish_b_vegetarian"]),
                 }
             )
-        # Включаем дополнительные сохранённые дни
-        for r in rows:
-            if r["day"] not in ordered_days:
-                result.append(
-                    {
-                        "day": r["day"],
-                        "dish_a": r["dish_a"],
-                        "dish_b": r["dish_b"],
-                        "complaint_cluster": r["complaint_cluster"] or "",
-                        "cost_assumption_note": "не указано",
-                        "dish_a_vegetarian": bool(r["dish_a_vegetarian"]),
-                        "dish_b_vegetarian": bool(r["dish_b_vegetarian"]),
-                    }
-                )
+        # Сохранённое меню ограничено каноническими пятью днями.
+        # Дополнительные/некорректные записи не добавляются, чтобы
+        # не было дублирования дней в интерфейсе.
         return result if result else None
     finally:
         conn.close()
+
+
+
+def subscribe_chat(chat_id, db_path=None):
+    chat_id = str(chat_id).strip()
+    if not chat_id:
+        raise ValueError("chat_id is required")
+    init_db(db_path)
+    conn = get_connection(db_path)
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO telegram_subscribers (chat_id, created_at) VALUES (?, ?)",
+            (chat_id, _now()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_subscribers(db_path=None):
+    init_db(db_path)
+    conn = get_connection(db_path)
+    try:
+        rows = conn.execute("SELECT chat_id FROM telegram_subscribers ORDER BY chat_id").fetchall()
+        return [r["chat_id"] for r in rows]
+    finally:
+        conn.close()
+
 
 
 _DEPRECATED_ALIASES = {

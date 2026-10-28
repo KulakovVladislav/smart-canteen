@@ -4,7 +4,6 @@
 import os
 import tempfile
 import unittest
-from datetime import date
 
 from src.menu import (
     MENU,
@@ -21,8 +20,8 @@ from src.storage import (
     save_leftover,
     save_menu,
 )
-from src.waste_calc import load_waste
 from src.telegram_bot import handle_update
+from src.waste_calc import load_waste
 
 
 class TestActiveMenuVegetarian(unittest.TestCase):

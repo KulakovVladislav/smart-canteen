@@ -10,9 +10,9 @@ import urllib.parse
 import urllib.request
 from datetime import date, timedelta
 
-from domain.menu import get_menu, day_for_date, get_active_menu, vegetarian_letters_for_day
+from domain.menu import day_for_date, get_active_menu, vegetarian_letters_for_day
 from domain.preorder import kitchen_summary
-from repositories.storage import get_orders, save_order
+from repositories.storage import get_orders, get_subscribers, save_order, subscribe_chat
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -83,7 +83,8 @@ def _flatten(payload, prefix=""):
 def send_message(token, chat_id, text, reply_markup=None, timeout=30):
     payload = {"chat_id": chat_id, "text": text}
     if reply_markup is not None:
-        payload["reply_markup"] = reply_markup if isinstance(reply_markup, str) else json.dumps(reply_markup, ensure_ascii=False)
+        payload["reply_markup"] = reply_markup if isinstance(reply_markup, str) else json.dumps(reply_markup,
+                                                                                                ensure_ascii=False)
     return api_call(token, "sendMessage", payload, timeout=timeout)
 
 
@@ -162,7 +163,8 @@ def handle_update(update, token=None, db_path=None):
                 student_code = f"TG-{user_id}"
                 save_order(student_code, meal_date, dish, db_path=db_path)
                 if token:
-                    send_message(token, chat_id, f"Заказ сохранён: {meal_date}, блюдо {dish}. Можно изменить до закрытия предзаказа.")
+                    send_message(token, chat_id,
+                                 f"Заказ сохранён: {meal_date}, блюдо {dish}. Можно изменить до закрытия предзаказа.")
             except Exception as exc:
                 if token:
                     send_message(token, chat_id, f"Не удалось сохранить заказ: {exc}")
@@ -178,6 +180,11 @@ def handle_update(update, token=None, db_path=None):
     if not text:
         return
     if text.startswith("/start"):
+        if chat_id is not None:
+            try:
+                subscribe_chat(chat_id, db_path=db_path)
+            except Exception:
+                pass
         if token:
             send_message(
                 token,
@@ -198,7 +205,8 @@ def handle_update(update, token=None, db_path=None):
     if text.startswith("/order"):
         d = next_school_day()
         if token:
-            send_message(token, chat_id, f"Выберите блюдо на {d.isoformat()}:", reply_markup=build_order_keyboard(d.isoformat()))
+            send_message(token, chat_id, f"Выберите блюдо на {d.isoformat()}:",
+                         reply_markup=build_order_keyboard(d.isoformat()))
         return
     if text.startswith("/myorder"):
         d = next_school_day()
@@ -276,3 +284,112 @@ def run_bot(token=None, db_path=None, poll_timeout=20):
 
 if __name__ == "__main__":
     run_bot()
+
+
+def _kitchen_summary_text(orders, expected_diners, veg_letters, meal_date):
+    summary = kitchen_summary(orders, expected_diners, veg_letters)
+    text_out = (
+        f"Сводка для кухни на {meal_date.isoformat() if hasattr(meal_date, 'isoformat') else meal_date}:\n"
+        f"Порций A: {summary['a_orders']}\n"
+        f"Порций B: {summary['b_orders']}\n"
+        f"Вегетарианских: {summary['vegetarian_orders']}\n"
+        f"Не ответили: {summary['unanswered']}\n"
+        f"Базовые порции: {summary['base_portions']}\n"
+        f"Резерв {summary['buffer_percent']}%: {summary['buffer']}\n"
+        f"Итого порций: {summary['total_portions']}"
+    )
+    if summary["unknown_distribution"] > 0:
+        text_out += f"\nРаспределение A/B для {summary['unknown_distribution']} не ответивших неизвестно."
+    return text_out
+
+
+def broadcast_menu(token, meal_date=None, db_path=None):
+    """Отправить меню на дату всем подписчикам бота. Возвращает число успешных отправок."""
+    if meal_date is None:
+        meal_date = next_school_day()
+    if isinstance(meal_date, str):
+        meal_date = date.fromisoformat(meal_date)
+    chat_ids = get_subscribers(db_path)
+    text = menu_text_for_date(meal_date, db_path=db_path)
+    keyboard = build_order_keyboard(meal_date.isoformat())
+    sent = 0
+    for cid in chat_ids:
+        try:
+            send_message(token, cid, text, reply_markup=keyboard)
+            sent += 1
+        except Exception:
+            continue
+    return sent
+
+
+def send_kitchen_summary_to_admins(token, meal_date=None, db_path=None, expected_diners=None):
+    """Отправить сводку для кухни администраторам. Возвращает число успешных отправок."""
+    if meal_date is None:
+        meal_date = date.today()
+    if isinstance(meal_date, str):
+        meal_date = date.fromisoformat(meal_date)
+    if expected_diners is None:
+        try:
+            expected_diners = int(os.environ.get("CANTEEN_EXPECTED_DINERS", "500"))
+        except ValueError:
+            expected_diners = 500
+    orders = get_orders(meal_date.isoformat(), db_path=db_path)
+    day_name = day_for_date(meal_date)
+    veg_letters = vegetarian_letters_for_day(day_name, menu=get_active_menu(db_path)) if day_name else []
+    text_out = _kitchen_summary_text(orders, expected_diners, veg_letters, meal_date)
+    sent = 0
+    for admin_id in get_admin_ids():
+        try:
+            send_message(token, admin_id, text_out)
+            sent += 1
+        except Exception:
+            continue
+    return sent
+
+
+def run_daily_job(token=None, db_path=None, today=None, broadcast_menu_date=None, summary_date=None):
+    """Разовая утренняя процедура: рассылка меню и сводка для кухни.
+
+    Возвращает словарь с результатами отправки.
+    """
+    token = token or get_bot_token()
+    if not token:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is not set")
+    if today is None:
+        today = date.today()
+    if broadcast_menu_date is None:
+        broadcast_menu_date = next_school_day(today)
+    if summary_date is None:
+        # Сводка готовится на текущий день (заказы собраны ранее).
+        summary_date = today
+    menu_sent = broadcast_menu(token, meal_date=broadcast_menu_date, db_path=db_path)
+    summary_sent = send_kitchen_summary_to_admins(token, meal_date=summary_date, db_path=db_path)
+    return {"menu_sent": menu_sent, "summary_sent": summary_sent,
+            "broadcast_date": broadcast_menu_date.isoformat() if hasattr(broadcast_menu_date, "isoformat") else str(broadcast_menu_date),
+            "summary_date": summary_date.isoformat() if hasattr(summary_date, "isoformat") else str(summary_date)}
+
+
+def run_scheduled(token=None, db_path=None, broadcast_hour=9, broadcast_minute=0,
+                  poll_interval=30, run_once_time=None):
+    """Цикл планировщика: выполняет run_daily_job раз в день в заданное время."""
+    token = token or get_bot_token()
+    if not token:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is not set")
+    last_run_date = None
+    while True:
+        now = datetime.now() if False else None
+        from datetime import datetime as _dt
+
+        now = _dt.now()
+        if (now.hour, now.minute) == (broadcast_hour, broadcast_minute) and last_run_date != now.date():
+            last_run_date = now.date()
+            try:
+                run_daily_job(token=token, db_path=db_path, today=now.date())
+            except Exception as exc:
+                import logging
+
+                logging.getLogger(__name__).warning("Scheduled daily job failed: %s", exc)
+        # Для тестов/ручного запуска: если указано run_once_time и оно совпало, выходим.
+        if run_once_time is not None and (now.hour, now.minute) >= run_once_time:
+            break
+        time.sleep(poll_interval)

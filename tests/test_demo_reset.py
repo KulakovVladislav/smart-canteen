@@ -145,7 +145,9 @@ class TestResetDemoDataUI(unittest.TestCase):
 
         self.assertEqual(len(self.at.exception), 0)
         self.assertEqual(len(get_orders(db_path=self.db)), 1)
-        self.assertEqual([item.value for item in self.at.success], [])
+        reset_messages = [m for m in (item.value for item in self.at.success)
+                          if "заказы, стоимости блюд и остатки" in m]
+        self.assertEqual(reset_messages, [])
 
 
 if __name__ == "__main__":
