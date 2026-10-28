@@ -8,9 +8,9 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from src.menu import get_menu, validate_menu, check_budget
-from src.preorder import SAMPLE_PREORDERS, count_preorders, format_summary
-from src.economics import print_report
+from domain.menu import get_menu, validate_menu, check_budget
+from domain.preorder import SAMPLE_PREORDERS, count_preorders, format_summary
+from domain.economics import print_report
 
 
 def cmd_menu():
