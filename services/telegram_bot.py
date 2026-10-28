@@ -214,10 +214,6 @@ def build_main_keyboard(is_admin_user=False):
             ],
             [
                 {"text": "📋 Меню на завтра", "callback_data": "nav:menu"},
-                {"text": "🛒 Заказать обед", "callback_data": "nav:order"},
-            ],
-            [
-                {"text": "🧾 Мой заказ", "callback_data": "nav:myorder"},
                 {"text": "❓ Помощь", "callback_data": "nav:help"},
             ],
         ]
@@ -318,6 +314,14 @@ def handle_update(update, token=None, db_path=None):
             return
         if data.startswith("nav:"):
             action = data.split(":", 1)[1]
+            if action in ("order", "myorder") and is_admin(user_id):
+                if token:
+                    send_message(token, chat_id, "🔒 Этот раздел доступен только ученикам.")
+                return
+            if action in ("summary", "leftover") and not is_admin(user_id):
+                if token:
+                    send_message(token, chat_id, "🔒 Этот раздел доступен только поварам/администраторам.")
+                return
             if token:
                 if action in ("home", "start"):
                     _send_main_menu(chat_id, token, db_path=db_path, user_id=user_id)
@@ -462,6 +466,10 @@ def handle_update(update, token=None, db_path=None):
                 send_message(token, chat_id, text_out, reply_markup=keyboard)
         return
     if text.startswith("/order"):
+        if is_admin(user_id):
+            if token:
+                send_message(token, chat_id, "🔒 Заказ обеда доступен только ученикам.")
+            return
         d = next_school_day()
         if token:
             caption = f"🛒 <b>Выберите блюдо на {html.escape(d.isoformat())}:</b>"
@@ -472,6 +480,10 @@ def handle_update(update, token=None, db_path=None):
                 send_message(token, chat_id, caption, reply_markup=keyboard)
         return
     if text.startswith("/myorder"):
+        if is_admin(user_id):
+            if token:
+                send_message(token, chat_id, "🔒 Проверка ученического заказа доступна только ученикам.")
+            return
         d = next_school_day()
         orders = [o for o in get_orders(d.isoformat(), db_path=db_path) if o["student_code"] == f"TG-{user_id}"]
         if token:
