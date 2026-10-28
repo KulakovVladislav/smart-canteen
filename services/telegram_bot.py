@@ -20,8 +20,18 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WELCOME_IMAGE_URL = os.environ.get("CANTEEN_BOT_IMAGE_URL", "https://loremflickr.com/900/500/food,school?lock=2024")
 
 
-def menu_image_url(meal_date):
-    """Стабильная картинка для конкретного дня меню."""
+def menu_image_url(meal_date, db_path=None):
+    """Картинка для дня меню: из меню, если есть, иначе стабильная заглушка."""
+    try:
+        from domain.menu import day_for_date, get_active_menu
+
+        day_name = day_for_date(meal_date)
+        if day_name:
+            item = next((m for m in get_active_menu(db_path) if m["day"] == day_name), None)
+            if item and item.get("image_url"):
+                return str(item["image_url"])
+    except Exception:
+        pass
     lock = 1
     if hasattr(meal_date, "weekday"):
         lock = int(meal_date.weekday()) + 1
@@ -33,6 +43,17 @@ def menu_image_url(meal_date):
         except ValueError:
             lock = 1
     return f"https://loremflickr.com/900/500/food,school,meal?lock={lock}"
+
+
+def dish_image_url(dish_name):
+    """Стабильная картинка для конкретного блюда (включая новые блюда)."""
+    name = str(dish_name or "").strip()
+    lock = 1
+    for ch in name:
+        lock = (lock * 31 + ord(ch)) % 997
+    if lock == 0:
+        lock = 1
+    return f"https://loremflickr.com/900/500/food,meal,dish?lock={lock}"
 
 def get_bot_token():
     return os.environ.get("TELEGRAM_BOT_TOKEN", "").strip() or None
@@ -222,7 +243,7 @@ def _send_main_menu(chat_id, token, db_path=None, user_id=None):
         "Выберите действие кнопкой ниже 👇"
     )
     try:
-        send_photo(token, chat_id, menu_image_url(d), caption=caption, reply_markup=keyboard)
+        send_photo(token, chat_id, menu_image_url(d, db_path=db_path), caption=caption, reply_markup=keyboard)
     except Exception:
         send_message(token, chat_id, caption, reply_markup=keyboard)
 
@@ -263,14 +284,20 @@ def handle_update(update, token=None, db_path=None):
                 save_order(student_code, meal_date, dish, db_path=db_path)
                 if token:
                     try:
+                        day_name = day_for_date(date.fromisoformat(meal_date))
+                        item = next((m for m in get_active_menu(db_path) if m["day"] == day_name), None)
+                        selected_name = dish
+                        if item:
+                            selected_name = item["dish_a"] if dish == "A" else item["dish_b"]
+                        photo = item.get("image_url") if item and item.get("image_url") else dish_image_url(selected_name)
                         send_photo(
                             token,
                             chat_id,
-                            WELCOME_IMAGE_URL,
+                            photo,
                             caption=(
                                 f"✅ <b>Заказ сохранён!</b>\n"
                                 f"📅 Дата: {html.escape(meal_date)}\n"
-                                f"🍽️ Блюдо: <b>{html.escape(dish)}</b>\n\n"
+                                f"🍽️ Блюдо: <b>{html.escape(dish)} — {html.escape(str(selected_name))}</b>\n\n"
                                 "Можно изменить выбор до закрытия предзаказа. 😊"
                             ),
                             reply_markup=build_main_keyboard(is_admin(user_id)),
@@ -299,7 +326,7 @@ def handle_update(update, token=None, db_path=None):
                     text_out = menu_text_for_date(d, db_path=db_path)
                     keyboard = build_order_keyboard(d, db_path=db_path)
                     try:
-                        send_photo(token, chat_id, menu_image_url(d), caption=text_out, reply_markup=keyboard)
+                        send_photo(token, chat_id, menu_image_url(d, db_path=db_path), caption=text_out, reply_markup=keyboard)
                     except Exception:
                         send_message(token, chat_id, text_out, reply_markup=keyboard)
                 elif action == "order":
@@ -307,7 +334,7 @@ def handle_update(update, token=None, db_path=None):
                     caption = f"🛒 <b>Выберите блюдо на {html.escape(d.isoformat())}:</b>"
                     keyboard = build_order_keyboard(d, db_path=db_path)
                     try:
-                        send_photo(token, chat_id, menu_image_url(d), caption=caption, reply_markup=keyboard)
+                        send_photo(token, chat_id, menu_image_url(d, db_path=db_path), caption=caption, reply_markup=keyboard)
                     except Exception:
                         send_message(token, chat_id, caption, reply_markup=keyboard)
                 elif action == "myorder":
@@ -430,7 +457,7 @@ def handle_update(update, token=None, db_path=None):
             text_out = menu_text_for_date(d, db_path=db_path)
             keyboard = build_order_keyboard(d, db_path=db_path)
             try:
-                send_photo(token, chat_id, menu_image_url(d), caption=text_out, reply_markup=keyboard)
+                send_photo(token, chat_id, menu_image_url(d, db_path=db_path), caption=text_out, reply_markup=keyboard)
             except Exception:
                 send_message(token, chat_id, text_out, reply_markup=keyboard)
         return
@@ -440,7 +467,7 @@ def handle_update(update, token=None, db_path=None):
             caption = f"🛒 <b>Выберите блюдо на {html.escape(d.isoformat())}:</b>"
             keyboard = build_order_keyboard(d, db_path=db_path)
             try:
-                send_photo(token, chat_id, menu_image_url(d), caption=caption, reply_markup=keyboard)
+                send_photo(token, chat_id, menu_image_url(d, db_path=db_path), caption=caption, reply_markup=keyboard)
             except Exception:
                 send_message(token, chat_id, caption, reply_markup=keyboard)
         return
@@ -581,7 +608,7 @@ def broadcast_menu(token, meal_date=None, db_path=None):
     for cid in chat_ids:
         try:
             try:
-                send_photo(token, cid, menu_image_url(meal_date), caption=text, reply_markup=keyboard)
+                send_photo(token, cid, menu_image_url(meal_date, db_path=db_path), caption=text, reply_markup=keyboard)
             except Exception:
                 send_message(token, cid, text, reply_markup=keyboard)
             sent += 1
