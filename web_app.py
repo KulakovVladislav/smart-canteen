@@ -49,7 +49,6 @@ from src.storage import (
 
 st.set_page_config(page_title="Умная столовая", page_icon="🍽️", layout="wide")
 
-init_db()
 
 STUDENT_CODE_RE = re.compile(r"^[A-Za-z0-9-]{3,20}$")
 
@@ -754,6 +753,7 @@ def page_ai():
 PAGES = ["Главная", "Меню", "Предзаказ", "Кухня", "Остатки", "Экономика", "Проверка бюджета", "AI-меню"]
 
 def main():
+    init_db()
     if "page" not in st.session_state:
         qp = st.query_params.get("page")
         st.session_state["page"] = qp if qp in PAGES else "Главная"

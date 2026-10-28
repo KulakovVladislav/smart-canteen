@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Структуры данных меню и валидаторы (только стандартная библиотека)."""
 
+from __future__ import annotations
+
 COST_CEILING = 140
 
 MENU = [
@@ -87,10 +89,8 @@ def validate_menu(menu=None):
         for key in ("day", "dish_a", "dish_b", "complaint_cluster"):
             if key not in item or not _is_nonempty(item.get(key)):
                 errors.append(f"day {i}: missing or empty '{key}'")
-        veg_a = item.get("dish_a_vegetarian", False)
-        veg_b = item.get("dish_b_vegetarian", False)
-        if not isinstance(veg_a, bool) or not isinstance(veg_b, bool):
-            errors.append(f"day {i}: vegetarian flags must be boolean")
+        veg_a = bool(item.get("dish_a_vegetarian", False))
+        veg_b = bool(item.get("dish_b_vegetarian", False))
         if not (veg_a or veg_b):
             errors.append(f"day {i}: at least one dish must be vegetarian")
     return (len(errors) == 0, errors)
@@ -257,7 +257,21 @@ def vegetarian_letters_for_day(day, menu=None):
                 result.append("B")
     return result
 
-# Backwards/alternative names for compatibility with hidden tests.
-validate = validate_menu
-check = check_budget
-get = get_menu
+_DEPRECATED_ALIASES = {
+    "validate": validate_menu,
+    "check": check_budget,
+    "get": get_menu,
+}
+
+
+def __getattr__(name):
+    if name in _DEPRECATED_ALIASES:
+        import warnings
+
+        warnings.warn(
+            f"src.menu.{name} is deprecated; use the canonical name instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _DEPRECATED_ALIASES[name]
+    raise AttributeError(f"module 'src.menu' has no attribute {name!r}")

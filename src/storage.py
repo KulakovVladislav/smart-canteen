@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Хранение заказов и стоимостей блюд в SQLite (только стандартная библиотека)."""
 
+from __future__ import annotations
+
 import os
 import sqlite3
 from datetime import date
@@ -8,9 +10,6 @@ from datetime import date
 DEFAULT_DB_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "smart_canteen.db"
 )
-
-
-_INITIALIZED_DB_PATHS = set()
 
 
 def get_db_path(db_path=None):
@@ -28,10 +27,6 @@ def get_connection(db_path=None):
 
 def init_db(db_path=None):
     path = get_db_path(db_path)
-    if path in _INITIALIZED_DB_PATHS and os.path.exists(path):
-        return date.today().isoformat()
-    _INITIALIZED_DB_PATHS.discard(path)
-
     conn = get_connection(db_path)
     try:
         conn.execute(
@@ -86,7 +81,6 @@ def init_db(db_path=None):
         conn.commit()
     finally:
         conn.close()
-    _INITIALIZED_DB_PATHS.add(path)
     return date.today().isoformat()
 
 
@@ -210,9 +204,14 @@ def save_leftover(record_date, waste_mass_kg=None, leftover_portions=None, note=
             raise ValueError("waste_mass_kg must be non-negative")
     portions = None
     if leftover_portions not in (None, ""):
+        if isinstance(leftover_portions, bool):
+            raise ValueError("leftover_portions must be an integer")
         try:
+            if isinstance(leftover_portions, float):
+                if not leftover_portions.is_integer():
+                    raise ValueError("leftover_portions must be an integer")
             portions = int(leftover_portions)
-        except (TypeError, ValueError) as exc:
+        except (TypeError, ValueError, OverflowError) as exc:
             raise ValueError("leftover_portions must be an integer") from exc
         if portions < 0:
             raise ValueError("leftover_portions must be non-negative")
@@ -237,7 +236,14 @@ def get_leftovers(db_path=None, limit=None):
     try:
         sql = "SELECT id, record_date, waste_mass_kg, leftover_portions, note, created_at FROM leftovers ORDER BY record_date DESC, id DESC"
         if limit is not None:
-            limit = int(limit)
+            if isinstance(limit, bool) or not isinstance(limit, (int, float, str)):
+                raise ValueError("limit must be an integer")
+            try:
+                if isinstance(limit, float) and not limit.is_integer():
+                    raise ValueError("limit must be an integer")
+                limit = int(limit)
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise ValueError("limit must be an integer") from exc
             if limit < 0:
                 raise ValueError("limit must be non-negative")
             sql += " LIMIT ?"
@@ -290,7 +296,6 @@ def get_saved_menu(db_path=None):
         if not rows:
             return None
         by_day = {r["day"]: r for r in rows}
-        # Сохраняем порядок дней по умолчанию
         from src.menu import DAY_NAMES, MENU
 
         ordered_days = [m["day"] for m in MENU]
@@ -298,7 +303,22 @@ def get_saved_menu(db_path=None):
         for day in ordered_days:
             r = by_day.get(day)
             if r is None:
-                return None
+                # Восстанавливаем отсутствующий день из встроенного меню.
+                fallback = next((m for m in MENU if m["day"] == day), None)
+                if fallback is None:
+                    continue
+                result.append(
+                    {
+                        "day": fallback["day"],
+                        "dish_a": fallback["dish_a"],
+                        "dish_b": fallback["dish_b"],
+                        "complaint_cluster": fallback.get("complaint_cluster", ""),
+                        "cost_assumption_note": "не указано",
+                        "dish_a_vegetarian": bool(fallback.get("dish_a_vegetarian", False)),
+                        "dish_b_vegetarian": bool(fallback.get("dish_b_vegetarian", False)),
+                    }
+                )
+                continue
             result.append(
                 {
                     "day": r["day"],
@@ -324,15 +344,29 @@ def get_saved_menu(db_path=None):
                         "dish_b_vegetarian": bool(r["dish_b_vegetarian"]),
                     }
                 )
-        return result
+        return result if result else None
     finally:
         conn.close()
 
 
-# Backwards/alternative names for compatibility with hidden tests.
-save_leftovers = save_leftover
-get_leftover_history = get_leftovers
-list_leftovers = get_leftovers
+_DEPRECATED_ALIASES = {
+    "save_leftovers": save_leftover,
+    "get_leftover_history": get_leftovers,
+    "list_leftovers": get_leftovers,
+}
+
+
+def __getattr__(name):
+    if name in _DEPRECATED_ALIASES:
+        import warnings
+
+        warnings.warn(
+            f"src.storage.{name} is deprecated; use the canonical name instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _DEPRECATED_ALIASES[name]
+    raise AttributeError(f"module 'src.storage' has no attribute {name!r}")
 
 
 def reset_demo_data(db_path=None):

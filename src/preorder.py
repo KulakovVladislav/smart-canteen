@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Подсчёт предзаказов и формирование сводки для кухни (только стандартная библиотека)."""
 
+from __future__ import annotations
+
 import math
 
 BUFFER_PERCENT = 5
@@ -243,7 +245,22 @@ def kitchen_summary(orders, expected_diners, vegetarian_letters=None, buffer_per
         "b_distribution_known": b_orders,
         "unknown_distribution": unknown_distribution,
     }
-counts = count_preorders
-parse = count_preorders
-parse_preorders = count_preorders
-summary = summarize
+_DEPRECATED_ALIASES = {
+    "counts": count_preorders,
+    "parse": count_preorders,
+    "parse_preorders": count_preorders,
+    "summary": summarize,
+}
+
+
+def __getattr__(name):
+    if name in _DEPRECATED_ALIASES:
+        import warnings
+
+        warnings.warn(
+            f"src.preorder.{name} is deprecated; use the canonical name instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _DEPRECATED_ALIASES[name]
+    raise AttributeError(f"module 'src.preorder' has no attribute {name!r}")

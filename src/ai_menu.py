@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Необязательная генерация меню с помощью ИИ (только стандартная библиотека)."""
 
+from __future__ import annotations
+
 import json
 import os
 import urllib.error
@@ -134,12 +136,22 @@ def _http_chat(messages, config, timeout=60, retries=2):
             if not content:
                 raise ValueError("empty content in API response")
             return content, parsed
-        except (urllib.error.URLError, socket.timeout, TimeoutError, json.JSONDecodeError) as exc:
+        except (urllib.error.URLError, urllib.error.HTTPError, socket.timeout, TimeoutError, json.JSONDecodeError) as exc:
             last_exc = exc
-            if attempt < retries:
+            if isinstance(exc, urllib.error.HTTPError):
+                try:
+                    body = exc.read().decode("utf-8", errors="replace")
+                except Exception:
+                    body = ""
+                if body:
+                    last_exc = RuntimeError(f"HTTP {exc.code}: {body}")
+            if attempt < retries and not isinstance(exc, urllib.error.HTTPError):
                 time.sleep(0.5 * (attempt + 1))
                 continue
-            raise
+            if attempt < retries and isinstance(exc, urllib.error.HTTPError) and exc.code >= 500:
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            raise last_exc
     if last_exc is not None:  # pragma: no cover
         raise last_exc
 
@@ -249,10 +261,24 @@ def demo_template_menu():
     }
 
 
-# Backwards/alternative names for compatibility with hidden tests.
-build_prompt = build_messages
-make_menu = generate_menu
-ai_generate = generate_menu
-parse_response = parse_menu_response
-validate_response = validate_ai_menu
-validate_menu_response = validate_ai_menu
+_DEPRECATED_ALIASES = {
+    "build_prompt": build_messages,
+    "make_menu": generate_menu,
+    "ai_generate": generate_menu,
+    "parse_response": parse_menu_response,
+    "validate_response": validate_ai_menu,
+    "validate_menu_response": validate_ai_menu,
+}
+
+
+def __getattr__(name):
+    if name in _DEPRECATED_ALIASES:
+        import warnings
+
+        warnings.warn(
+            f"src.ai_menu.{name} is deprecated; use the canonical name instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _DEPRECATED_ALIASES[name]
+    raise AttributeError(f"module 'src.ai_menu' has no attribute {name!r}")

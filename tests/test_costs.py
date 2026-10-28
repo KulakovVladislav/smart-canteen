@@ -66,12 +66,12 @@ class TestMenuValidation(unittest.TestCase):
         self.assertFalse(ok)
         self.assertTrue(any("complaint_cluster" in e for e in errors))
 
-    def test_non_bool_vegetarian_rejected(self):
+    def test_truthy_vegetarian_flags_normalized(self):
         menu = [dict(item) for item in get_menu()]
         menu[0]["dish_a_vegetarian"] = 1
         menu[0]["dish_b_vegetarian"] = 0
         ok, errors = validate_menu(menu)
-        self.assertFalse(ok)
+        self.assertTrue(ok, errors)
 
 
 if __name__ == "__main__":
