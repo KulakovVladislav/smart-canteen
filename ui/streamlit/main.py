@@ -71,7 +71,10 @@ def status_for_budget(report):
 
 
 def _go_to_preorder():
-    st.session_state["page"] = "Предзаказ"
+    st.session_state["page"] = "Заказы"
+
+def _go_to_kitchen():
+    st.session_state["page"] = "Кухня"
 
 
 def _reset_demo_data():
@@ -107,7 +110,7 @@ def page_home():
     col3.metric("Потери за год, сом", "—" if report is None else fmt_money(report["year_waste"]))
 
     st.write("")
-    st.button("Сделать предзаказ 🛒", on_click=_go_to_preorder, width="stretch")
+    st.button("Открыть сводку для кухни 🍳", on_click=_go_to_kitchen, width="stretch")
 
     with st.container(border=True, key="home-menu-card"):
         st.subheader("Меню на текущую неделю")
@@ -215,9 +218,9 @@ def page_menu():
         st.error("; ".join(errors))
 
 
-def page_preorder():
-    st.title("Предзаказ")
-    st.caption("Только тестовые коды, например TEST-001. Реальные персональные данные не собираются.")
+def page_orders():
+    st.title("Заказы (ручной ввод)")
+    st.caption("Инструмент администратора/демонстрации. Ученики заказывают через Telegram-бота; здесь можно вручную добавить тестовые заказы.")
 
     meal_date = st.date_input("Дата питания", value=date.today())
     day_name = day_for_date(meal_date)
@@ -637,7 +640,7 @@ def page_ai():
                 st.code(result["raw_text"])
 
 
-PAGES = ["Главная", "Меню", "Предзаказ", "Кухня", "Остатки", "Экономика", "Проверка бюджета", "AI-меню"]
+PAGES = ["Главная", "Меню", "Заказы", "Кухня", "Остатки", "Экономика", "Проверка бюджета", "AI-меню"]
 
 
 def main():
@@ -686,8 +689,8 @@ def main():
         page_home()
     elif page == "Меню":
         page_menu()
-    elif page == "Предзаказ":
-        page_preorder()
+    elif page == "Заказы":
+        page_orders()
     elif page == "Кухня":
         page_kitchen()
     elif page == "Остатки":
