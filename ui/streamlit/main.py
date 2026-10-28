@@ -70,9 +70,6 @@ def status_for_budget(report):
     return "OK"
 
 
-def _go_to_preorder():
-    st.session_state["page"] = "Заказы"
-
 def _go_to_kitchen():
     st.session_state["page"] = "Кухня"
 
@@ -217,47 +214,6 @@ def page_menu():
     else:
         st.error("; ".join(errors))
 
-
-def page_orders():
-    st.title("Заказы (ручной ввод)")
-    st.caption("Инструмент администратора/демонстрации. Ученики заказывают через Telegram-бота; здесь можно вручную добавить тестовые заказы.")
-
-    meal_date = st.date_input("Дата питания", value=date.today())
-    day_name = day_for_date(meal_date)
-    if day_name:
-        menu_day = next((m for m in get_active_menu() if m["day"] == day_name), None)
-        dish_labels = {
-            "A": menu_day["dish_a"] if menu_day else "Блюдо A",
-            "B": menu_day["dish_b"] if menu_day else "Блюдо B",
-        }
-        st.write(f"День недели: **{day_name}**")
-    else:
-        dish_labels = {"A": "Блюдо A", "B": "Блюдо B"}
-        st.warning("Выбран выходной день. Меню для будней; заказ всё равно можно сохранить.")
-
-    student_code = st.text_input("Демонстрационный код ученика", value="TEST-001")
-    dish = st.radio(
-        "Выберите блюдо",
-        options=["A", "B"],
-        format_func=lambda x: dish_labels[x] if dish_labels[x].startswith("Блюдо ") else f"{x} — {dish_labels[x]}",
-        horizontal=True,
-    )
-
-    if st.button("Сохранить заказ", type="primary"):
-        if not STUDENT_CODE_RE.match(student_code.strip()):
-            st.error("Код должен содержать 3-20 символов: буквы, цифры или дефис.")
-        else:
-            try:
-                with st.spinner("Сохранение..."):
-                    save_order(student_code.strip(), meal_date.isoformat(), dish)
-                st.success(
-                    "Заказ сохранён. Повторный выбор того же кода на эту дату обновит заказ, а не создаст дубликат.")
-            except ValueError as exc:
-                st.error(str(exc))
-
-    existing = [o for o in get_orders(meal_date.isoformat()) if o["student_code"] == student_code.strip()]
-    if existing:
-        st.info(f"Текущий заказ на {meal_date.isoformat()}: блюдо {existing[0]['dish']}.")
 
 
 def page_kitchen():
@@ -640,7 +596,7 @@ def page_ai():
                 st.code(result["raw_text"])
 
 
-PAGES = ["Главная", "Меню", "Заказы", "Кухня", "Остатки", "Экономика", "Проверка бюджета", "AI-меню"]
+PAGES = ["Главная", "Меню", "Кухня", "Остатки", "Экономика", "Проверка бюджета", "AI-меню"]
 
 
 def main():
@@ -689,8 +645,6 @@ def main():
         page_home()
     elif page == "Меню":
         page_menu()
-    elif page == "Заказы":
-        page_orders()
     elif page == "Кухня":
         page_kitchen()
     elif page == "Остатки":

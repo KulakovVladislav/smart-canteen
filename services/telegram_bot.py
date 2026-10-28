@@ -102,12 +102,27 @@ def get_updates(token, offset=None, timeout=20):
     return api_call(token, "getUpdates", payload, timeout=timeout + 5)
 
 
-def build_order_keyboard(meal_date):
+def _short(text, limit=28):
+    text = str(text or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "…"
+
+
+def build_order_keyboard(meal_date, db_path=None):
+    day_name = day_for_date(meal_date if not isinstance(meal_date, str) else date.fromisoformat(meal_date))
+    menu = get_active_menu(db_path)
+    item = next((m for m in menu if m["day"] == day_name), None) if day_name else None
+    label_a = "Блюдо A"
+    label_b = "Блюдо B"
+    if item:
+        label_a = f"A — {_short(item['dish_a'])}"
+        label_b = f"B — {_short(item['dish_b'])}"
     return {
         "inline_keyboard": [
             [
-                {"text": "Блюдо A", "callback_data": f"order:{meal_date}:A"},
-                {"text": "Блюдо B", "callback_data": f"order:{meal_date}:B"},
+                {"text": label_a, "callback_data": f"order:{meal_date if not hasattr(meal_date, 'isoformat') else meal_date.isoformat()}:A"},
+                {"text": label_b, "callback_data": f"order:{meal_date if not hasattr(meal_date, 'isoformat') else meal_date.isoformat()}:B"},
             ]
         ]
     }
@@ -116,12 +131,22 @@ def build_order_keyboard(meal_date):
 def menu_text_for_date(meal_date, db_path=None):
     day_name = day_for_date(meal_date)
     menu = get_active_menu(db_path)
-    lines = [f"Меню на {meal_date.isoformat()} ({day_name or 'день'}):"]
+    dstr = meal_date.isoformat() if hasattr(meal_date, "isoformat") else str(meal_date)
+    lines = [f"🍽️ Меню на {dstr} ({day_name or 'день'}):"]
     if day_name:
         item = next((m for m in menu if m["day"] == day_name), None)
         if item:
-            lines.append(f"A — {item['dish_a']}")
-            lines.append(f"B — {item['dish_b']}")
+            lines.append(f"  A — {item['dish_a']}")
+            lines.append(f"  B — {item['dish_b']}")
+            veg = []
+            if item.get("dish_a_vegetarian"):
+                veg.append("A")
+            if item.get("dish_b_vegetarian"):
+                veg.append("B")
+            if veg:
+                lines.append(f"  🌱 Вегетарианские: {', '.join(veg)}")
+            lines.append("")
+            lines.append("Нажмите кнопку ниже, чтобы выбрать блюдо 👇")
             return "\n".join(lines)
     for m in menu:
         lines.append(f"{m['day']}: A — {m['dish_a']} | B — {m['dish_b']}")
@@ -151,7 +176,7 @@ def handle_update(update, token=None, db_path=None):
             dish = parts[2].upper()
             if dish not in ("A", "B"):
                 if token:
-                    send_message(token, chat_id, "Некорректный выбор.")
+                    send_message(token, chat_id, "⚠️ Некорректный выбор.")
                 return
             try:
                 meal_date = date.fromisoformat(meal_date).isoformat()
@@ -163,8 +188,12 @@ def handle_update(update, token=None, db_path=None):
                 student_code = f"TG-{user_id}"
                 save_order(student_code, meal_date, dish, db_path=db_path)
                 if token:
-                    send_message(token, chat_id,
-                                 f"Заказ сохранён: {meal_date}, блюдо {dish}. Можно изменить до закрытия предзаказа.")
+                    send_message(
+                        token,
+                        chat_id,
+                        f"✅ Заказ сохранён!\nДата: {meal_date}\nБлюдо: {dish}\n\n"
+                        "Можно изменить выбор до закрытия предзаказа.",
+                    )
             except Exception as exc:
                 if token:
                     send_message(token, chat_id, f"Не удалось сохранить заказ: {exc}")
@@ -189,13 +218,27 @@ def handle_update(update, token=None, db_path=None):
             send_message(
                 token,
                 chat_id,
-                "Привет! Я бот предзаказа «Умной столовой».\n"
-                "Команды:\n/menu — меню\n/order — оформить заказ\n/myorder — мой заказ\n/help — помощь",
+                "👋 Привет! Я бот предзаказа «Умной столовой».\n\n"
+                "Здесь можно выбрать обед на завтра за пару секунд.\n\n"
+                "Команды:\n"
+                "📋 /menu — меню на завтра\n"
+                "🛒 /order — выбрать блюдо\n"
+                "🧾 /myorder — мой заказ\n"
+                "❓ /help — помощь",
             )
         return
     if text.startswith("/help"):
         if token:
-            send_message(token, chat_id, "Используйте /menu, /order, /myorder. Администраторы: /summary YYYY-MM-DD")
+            send_message(
+                token,
+                chat_id,
+                "ℹ️ Как пользоваться:\n"
+                "/menu — посмотреть меню на завтра\n"
+                "/order — выбрать блюдо (кнопками)\n"
+                "/myorder — проверить свой заказ\n\n"
+                "Заказ можно изменить до закрытия опроса.\n"
+                "Администраторам доступна команда /summary YYYY-MM-DD.",
+            )
         return
     if text.startswith("/menu"):
         d = next_school_day()
@@ -205,17 +248,21 @@ def handle_update(update, token=None, db_path=None):
     if text.startswith("/order"):
         d = next_school_day()
         if token:
-            send_message(token, chat_id, f"Выберите блюдо на {d.isoformat()}:",
-                         reply_markup=build_order_keyboard(d.isoformat()))
+            send_message(
+                token,
+                chat_id,
+                f"🛒 Выберите блюдо на {d.isoformat()}:",
+                reply_markup=build_order_keyboard(d, db_path=db_path),
+            )
         return
     if text.startswith("/myorder"):
         d = next_school_day()
         orders = [o for o in get_orders(d.isoformat(), db_path=db_path) if o["student_code"] == f"TG-{user_id}"]
         if token:
             if orders:
-                send_message(token, chat_id, f"Ваш заказ на {d.isoformat()}: блюдо {orders[0]['dish']}.")
+                send_message(token, chat_id, f"✅ Ваш заказ на {d.isoformat()}: блюдо {orders[0]['dish']}.")
             else:
-                send_message(token, chat_id, f"Заказ на {d.isoformat()} пока не оформлен.")
+                send_message(token, chat_id, f"ℹ️ Заказ на {d.isoformat()} пока не оформлен. Используйте /order.")
         return
     if text.startswith("/summary"):
         if not is_admin(user_id):
@@ -311,7 +358,7 @@ def broadcast_menu(token, meal_date=None, db_path=None):
         meal_date = date.fromisoformat(meal_date)
     chat_ids = get_subscribers(db_path)
     text = menu_text_for_date(meal_date, db_path=db_path)
-    keyboard = build_order_keyboard(meal_date.isoformat())
+    keyboard = build_order_keyboard(meal_date, db_path=db_path)
     sent = 0
     for cid in chat_ids:
         try:
