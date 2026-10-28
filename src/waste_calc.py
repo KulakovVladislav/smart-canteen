@@ -6,13 +6,14 @@ import os
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CSV_PATH = os.path.join(BASE_DIR, "data", "waste_by_day.csv")
 
-# Параметры школы
-BUDGET_PER_DAY = 70000          # дневной бюджет закупки, сом
-DAYS_PER_WEEK = 5
-WEEKS_PER_YEAR = 35
-SCHOOL_DAYS_PER_YEAR = 175
-WASTE_KG_PER_DAY = 60
-WASTE_COST_PER_KG = 15
+# Параметры школы. Значения по умолчанию соответствуют кейсу; могут быть
+# переопределены через переменные окружения без изменения кода.
+BUDGET_PER_DAY = int(os.environ.get("CANTEEN_DAILY_BUDGET", "70000"))
+DAYS_PER_WEEK = int(os.environ.get("CANTEEN_DAYS_PER_WEEK", "5"))
+WEEKS_PER_YEAR = int(os.environ.get("CANTEEN_WEEKS_PER_YEAR", "35"))
+SCHOOL_DAYS_PER_YEAR = int(os.environ.get("CANTEEN_SCHOOL_DAYS_PER_YEAR", "175"))
+WASTE_KG_PER_DAY = float(os.environ.get("CANTEEN_WASTE_KG_PER_DAY", "60"))
+WASTE_COST_PER_KG = float(os.environ.get("CANTEEN_WASTE_COST_PER_KG", "15"))
 
 
 REQUIRED_COLUMNS = {"day", "waste_percent"}
@@ -69,7 +70,7 @@ def compute_report():
     weekly_budget = BUDGET_PER_DAY * DAYS_PER_WEEK
     scenarios = []
     for target in (15, 10, 5):
-        saving_week = (avg_pct - target) / 100.0 * weekly_budget
+        saving_week = max(0.0, (avg_pct - target) / 100.0 * weekly_budget)
         saving_year = saving_week * WEEKS_PER_YEAR
         scenarios.append({"target": target, "saving_week": saving_week, "saving_year": saving_year})
     return {

@@ -84,11 +84,15 @@ def validate_menu(menu=None):
         if not isinstance(item, dict):
             errors.append(f"day {i}: item must be a dict")
             continue
-        for key in ("day", "dish_a", "dish_b"):
+        for key in ("day", "dish_a", "dish_b", "complaint_cluster"):
             if key not in item or not _is_nonempty(item.get(key)):
                 errors.append(f"day {i}: missing or empty '{key}'")
-        if "complaint_cluster" not in item:
-            errors.append(f"day {i}: missing 'complaint_cluster'")
+        veg_a = item.get("dish_a_vegetarian", False)
+        veg_b = item.get("dish_b_vegetarian", False)
+        if not isinstance(veg_a, bool) or not isinstance(veg_b, bool):
+            errors.append(f"day {i}: vegetarian flags must be boolean")
+        if not (veg_a or veg_b):
+            errors.append(f"day {i}: at least one dish must be vegetarian")
     return (len(errors) == 0, errors)
 
 
@@ -97,64 +101,45 @@ def is_valid_menu(menu=None):
     return ok
 
 
+def _cost_pair(value):
+    """Нормализовать значение стоимости в пару (стоимость A, стоимость B)."""
+    if value is None:
+        return None, None
+    if isinstance(value, dict):
+        ca = value.get("A", value.get("a", value.get("cost_a", value.get("dish_a"))))
+        cb = value.get("B", value.get("b", value.get("cost_b", value.get("dish_b"))))
+        return ca, cb
+    if isinstance(value, (tuple, list)):
+        ca = value[0] if len(value) > 0 else None
+        cb = value[1] if len(value) > 1 else None
+        return ca, cb
+    return value, None
+
+
 def _extract_costs(costs, menu):
-    """Вернуть список (день, стоимость A, стоимость B)."""
+    """Вернуть список (день, стоимость A, стоимость B) для дней меню."""
     if costs is None:
         return [(item["day"], None, None) for item in menu]
 
     if isinstance(costs, dict):
-        result = []
-        for item in menu:
-            day = item["day"]
-            val = costs.get(day)
-            if isinstance(val, dict):
-                ca = val.get("A", val.get("a", val.get("cost_a", val.get("dish_a"))))
-                cb = val.get("B", val.get("b", val.get("cost_b", val.get("dish_b"))))
-            elif isinstance(val, (tuple, list)):
-                ca = val[0] if len(val) > 0 else None
-                cb = val[1] if len(val) > 1 else None
-            else:
-                ca = val
-                cb = None
-            result.append((day, ca, cb))
-            # Включаем дополнительные дни, если они переданы
-        for day, val in costs.items():
-            if day not in {m["day"] for m in menu}:
-                if isinstance(val, dict):
-                    ca = val.get("A", val.get("a", val.get("cost_a")))
-                    cb = val.get("B", val.get("b", val.get("cost_b")))
-                elif isinstance(val, (tuple, list)):
-                    ca = val[0] if len(val) > 0 else None
-                    cb = val[1] if len(val) > 1 else None
-                else:
-                    ca = val
-                    cb = None
-                result.append((day, ca, cb))
-        return result
+        return [(item["day"], *_cost_pair(costs.get(item["day"]))) for item in menu]
 
     if isinstance(costs, (list, tuple)):
-        result = []
+        days = {item["day"] for item in menu}
         if costs and isinstance(costs[0], dict) and "day" in costs[0]:
             by_day = {c["day"]: c for c in costs}
-            for item in menu:
-                c = by_day.get(item["day"], {})
-                ca = c.get("cost_a", c.get("A", c.get("a")))
-                cb = c.get("cost_b", c.get("B", c.get("b")))
-                result.append((item["day"], ca, cb))
-        else:
-            # Параллельно меню
-            for idx, item in enumerate(menu):
-                val = costs[idx] if idx < len(costs) else None
-                if isinstance(val, dict):
-                    ca = val.get("cost_a", val.get("A", val.get("a")))
-                    cb = val.get("cost_b", val.get("B", val.get("b")))
-                elif isinstance(val, (tuple, list)):
-                    ca = val[0] if len(val) > 0 else None
-                    cb = val[1] if len(val) > 1 else None
-                else:
-                    ca = val
-                    cb = None
-                result.append((item["day"], ca, cb))
+            return [(item["day"], *_cost_pair(by_day.get(item["day"]))) for item in menu]
+        if costs and isinstance(costs[0], (list, tuple)) and len(costs[0]) >= 2 and isinstance(costs[0][0], str) and costs[0][0] in days:
+            by_day = {}
+            for c in costs:
+                if isinstance(c, (list, tuple)) and len(c) >= 2 and isinstance(c[0], str):
+                    by_day[c[0]] = c[1:]
+            return [(item["day"], *_cost_pair(by_day.get(item["day"]))) for item in menu]
+        result = []
+        for idx, item in enumerate(menu):
+            value = costs[idx] if idx < len(costs) else None
+            ca, cb = _cost_pair(value)
+            result.append((item["day"], ca, cb))
         return result
 
     return [(item["day"], None, None) for item in menu]

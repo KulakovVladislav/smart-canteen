@@ -30,11 +30,13 @@ class TestMenu(unittest.TestCase):
         self.assertFalse(ok)
         self.assertTrue(errors)
 
-    def test_invalid_menu_empty_dish(self):
-        bad = get_menu()
-        bad[0]["dish_a"] = ""
+    def test_invalid_menu_missing_vegetarian(self):
+        bad = [dict(item) for item in get_menu()]
+        bad[0]["dish_a_vegetarian"] = False
+        bad[0]["dish_b_vegetarian"] = False
         ok, errors = validate_menu(bad)
         self.assertFalse(ok)
+        self.assertTrue(errors)
 
     def test_budget_unknown_by_default(self):
         report = check_budget()

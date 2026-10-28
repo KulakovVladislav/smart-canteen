@@ -101,7 +101,10 @@ def build_messages(context=None):
     return messages
 
 
-def _http_chat(messages, config, timeout=60):
+def _http_chat(messages, config, timeout=60, retries=2):
+    import socket
+    import time
+
     url = config["base_url"] + "/chat/completions"
     payload = {
         "model": config["model"],
@@ -109,25 +112,36 @@ def _http_chat(messages, config, timeout=60):
         "temperature": 0.4,
     }
     data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        url,
-        data=data,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": "Bearer " + config["api_key"],
-        },
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        raw = resp.read().decode("utf-8")
-    parsed = json.loads(raw)
-    choices = parsed.get("choices") or []
-    if not choices:
-        raise ValueError("empty choices in API response")
-    content = choices[0].get("message", {}).get("content", "")
-    if not content:
-        raise ValueError("empty content in API response")
-    return content, parsed
+    last_exc = None
+    for attempt in range(retries + 1):
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + config["api_key"],
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw = resp.read().decode("utf-8")
+            parsed = json.loads(raw)
+            choices = parsed.get("choices") or []
+            if not choices:
+                raise ValueError("empty choices in API response")
+            content = choices[0].get("message", {}).get("content", "")
+            if not content:
+                raise ValueError("empty content in API response")
+            return content, parsed
+        except (urllib.error.URLError, socket.timeout, TimeoutError, json.JSONDecodeError) as exc:
+            last_exc = exc
+            if attempt < retries:
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            raise
+    if last_exc is not None:  # pragma: no cover
+        raise last_exc
 
 
 def parse_menu_response(text):

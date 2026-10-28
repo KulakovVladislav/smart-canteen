@@ -64,12 +64,12 @@ CUSTOM_CSS = """
     /* Текст */
     --sc-text: #1b2a26;
     --sc-text-soft: #4a5c55;
-    --sc-muted: #7a8a82;
+    --sc-muted: #6b7a73;
     /* Акцент и состояния */
     --sc-primary: #0f5b4f;
     --sc-primary-soft: #e8f4f1;
     --sc-success: #1f8a5a;
-    --sc-warning: #b8862b;
+    --sc-warning: #9a6f1f;
     --sc-danger: #b33a2b;
     /* Границы и разделители */
     --sc-border: #e3e5e1;
@@ -82,8 +82,8 @@ CUSTOM_CSS = """
     --sc-radius: 12px;
     --sc-radius-lg: 16px;
     /* Типографика */
-    --sc-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --sc-heading-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --sc-font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --sc-heading-font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --sc-text-base: 0.95rem;
     --sc-text-sm: 0.85rem;
     --sc-text-xs: 0.78rem;
@@ -96,7 +96,6 @@ CUSTOM_CSS = """
     --sc-space-lg: 24px;
     --sc-space-xl: 32px;
 }
-
 /* Тёмная тема — активируется Streamlit через data-theme="dark" */
 html[data-theme="dark"] {
     --sc-bg: #0f1412;
@@ -117,22 +116,32 @@ html[data-theme="dark"] {
     --sc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
+@media (prefers-color-scheme: dark) {
+    :root {
+        --sc-bg: #0f1412;
+        --sc-bg-soft: #161b18;
+        --sc-card: #181e1b;
+        --sc-surface: #1c2320;
+        --sc-text: #e8efe9;
+        --sc-text-soft: #b9c6be;
+        --sc-muted: #8a9890;
+        --sc-primary: #1fb08a;
+        --sc-primary-soft: #143830;
+        --sc-success: #2fb978;
+        --sc-warning: #e0a84b;
+        --sc-danger: #e06a5a;
+        --sc-border: #2a312d;
+        --sc-divider: #232926;
+        --sc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+        --sc-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+    }
+}
+
 .stApp { background: var(--sc-bg); color: var(--sc-text); }
 .block-container { padding-top: 1.5rem; padding-bottom: 2rem; max-width: 1200px; }
 h1, h2, h3, h4 { color: var(--sc-text); font-family: var(--sc-heading-font); letter-spacing: -0.01em; }
-p, li, span { color: var(--sc-text-soft); }
-.sc-muted { color: var(--sc-muted); font-size: var(--sc-text-sm); }
-.sc-card {
-    background: var(--sc-card);
-    border: 1px solid var(--sc-border);
-    border-radius: var(--sc-radius);
-    padding: var(--sc-space-md);
-    margin-bottom: var(--sc-space-md);
-    box-shadow: var(--sc-shadow-sm);
-}
-.sc-status-ok { color: var(--sc-success); font-weight: 600; }
-.sc-status-warn { color: var(--sc-warning); font-weight: 600; }
-.sc-status-bad { color: var(--sc-danger); font-weight: 600; }
+.stApp p, .stApp li { color: var(--sc-text-soft); }
+.stApp .stCaption, .stApp .stMarkdown caption { color: var(--sc-muted); }
 div[data-testid="stMetric"] {
     background: var(--sc-card);
     border: 1px solid var(--sc-border);
@@ -164,16 +173,51 @@ div[data-testid="stDataFrame"] td { border-bottom: 1px solid var(--sc-divider); 
 .stButton > button:disabled { opacity: 0.5; }
 
 /* Фокус */
-:focus-visible {
+.stApp :focus-visible {
     outline: 2px solid var(--sc-primary);
     outline-offset: 2px;
 }
 
+/* Числа */
+div[data-testid="stMetricValue"] { font-variant-numeric: tabular-nums; }
+.stApp [data-testid="stDataFrame"] td { font-variant-numeric: tabular-nums; }
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        transition: none !important;
+        animation: none !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* Цветовая схема */
+:root { color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root { color-scheme: dark; } }
+
 /* Сайдбар */
 [data-testid="stSidebar"] { background: var(--sc-bg-soft); border-right: 1px solid var(--sc-divider); }
+[data-testid="stSidebar"] [data-testid="stSidebarNav"] > div > a {
+    border-radius: var(--sc-radius);
+    padding: 0.45rem 0.75rem;
+    color: var(--sc-text-soft);
+    font-weight: 500;
+}
+[data-testid="stSidebar"] [data-testid="stSidebarNav"] > div > a:hover {
+    background: var(--sc-surface);
+    color: var(--sc-text);
+}
+[data-testid="stSidebar"] [data-testid="stSidebarNav"] > div > a[aria-current="true"] {
+    background: var(--sc-primary-soft);
+    color: var(--sc-primary);
+}
+[data-testid="stSidebar"] [data-testid="stSidebarCaption"] { color: var(--sc-muted); }
 
-/* Информационные блоки */
-.stAlert { border-radius: var(--sc-radius); }
+/* Адаптивность */
+@media (max-width: 768px) {
+    .block-container { padding-left: 0.75rem; padding-right: 0.75rem; }
+    div[data-testid="stMetric"] { padding: 0.5rem 0.75rem; }
+}
 </style>
 """
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
@@ -191,9 +235,13 @@ def status_for_budget(report):
     return "OK"
 
 
+def _go_to_preorder():
+    st.session_state["page"] = "Предзаказ"
+
+
 def page_home():
     st.title("Умная столовая")
-    st.caption("Цикл: жалобы → AI-меню → предзаказ → сводка кухни → отходы → эффект. Тестовые данные и расчётные сценарии явно отделены от измерений.")
+    st.caption("Планирование меню под жалобы учеников, предзаказ, учёт остатков и расчёт экономики.")
 
     all_orders = get_orders()
     try:
@@ -202,60 +250,81 @@ def page_home():
         report = None
         st.warning(f"Данные об отходах недоступны: {exc}")
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     col1.metric("Заказов в базе", len(all_orders))
-    col2.metric("Потери за неделю, сом", "нет данных" if report is None else fmt_money(report["week_total"]))
-    col3.metric("Потери за год, сом", "нет данных" if report is None else fmt_money(report["year_waste"]))
-    col4.metric("Потолок себестоимости, сом", COST_CEILING)
+    col2.metric("Потери за неделю, сом", "—" if report is None else fmt_money(report["week_total"]))
+    col3.metric("Потери за год, сом", "—" if report is None else fmt_money(report["year_waste"]))
 
-    st.markdown('<div class="sc-card">', unsafe_allow_html=True)
-    st.subheader("Меню на текущую неделю")
-    menu = get_active_menu()
-    st.dataframe(
-        [
-            {
-                "День": m["day"],
-                "Блюдо A": m["dish_a"],
-                "Блюдо B": m["dish_b"],
-                "Вегетарианское": ("A" if m.get("dish_a_vegetarian") else "") + (" / B" if m.get("dish_b_vegetarian") else ""),
-                "Жалоба": m["complaint_cluster"],
-            }
-            for m in menu
-        ],
-        use_container_width=True,
-        hide_index=True,
-    )
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.write("")
+    st.button("Сделать предзаказ 🛒", on_click=_go_to_preorder, use_container_width=True)
+
+    with st.container(border=True):
+        st.subheader("Меню на текущую неделю")
+        menu = get_active_menu()
+        st.dataframe(
+            [
+                {
+                    "День": m["day"],
+                    "Блюдо A": m["dish_a"],
+                    "Блюдо B": m["dish_b"],
+                    "Вегетарианское": _veg_label(m),
+                    "Жалоба": m["complaint_cluster"],
+                }
+                for m in menu
+            ],
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "День": st.column_config.TextColumn(width="small"),
+                "Блюдо A": st.column_config.TextColumn(width="large"),
+                "Блюдо B": st.column_config.TextColumn(width="large"),
+                "Вегетарианское": st.column_config.TextColumn(width="small"),
+                "Жалоба": st.column_config.TextColumn(width="medium"),
+            },
+        )
 
     if report is not None:
-        st.markdown('<div class="sc-card">', unsafe_allow_html=True)
-        st.subheader("Сценарии экономии (расчётные)")
-        for s in report["scenarios"]:
-            st.write(
-                f"- до {s['target']}% отходов: экономия в неделю {fmt_money(s['saving_week'])} сом, "
-                f"за год {fmt_money(s['saving_year'])} сом"
-            )
-        st.info(
-            "Потенциальная экономия — расчётный сценарий, а не подтверждённый результат. "
-            "Используются только тестовые данные. Демонстрационные данные явно отделены от измерений."
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
+        with st.container(border=True):
+            col_a, col_b = st.columns([3, 1])
+            with col_a:
+                st.subheader("Сценарии экономии (расчётные)")
+                for s in report["scenarios"]:
+                    st.write(
+                        f"- до {s['target']}% отходов: экономия в неделю {fmt_money(s['saving_week'])} сом, "
+                        f"за год {fmt_money(s['saving_year'])} сом"
+                    )
+            with col_b:
+                st.caption(
+                    "Потенциальная экономия — расчётный сценарий, а не подтверждённый результат. "
+                    "Используются только тестовые данные."
+                )
 
-    st.markdown('<div class="sc-card">', unsafe_allow_html=True)
-    st.subheader("Статусы системы")
-    st.success("CLI доступен: python app.py all (через python3 .venv)")
-    st.success("База данных SQLite инициализирована")
-    saved = get_saved_menu()
-    if saved:
-        st.info("Используется сохранённое меню (в том числе после AI-генерации).")
-    else:
-        st.info("Используется встроенное демонстрационное меню.")
-    st.warning("Реальные персональные данные не собираются; полноценная авторизация — следующий этап.")
-    st.markdown("</div>", unsafe_allow_html=True)
+    with st.expander("О системе"):
+        st.success("CLI доступен: python app.py all (через python3 .venv)")
+        st.success("База данных SQLite инициализирована")
+        saved = get_saved_menu()
+        if saved:
+            st.info("Используется сохранённое меню (в том числе после AI-генерации).")
+        else:
+            st.info("Используется встроенное демонстрационное меню.")
+        st.warning("Реальные персональные данные не собираются; полноценная авторизация — следующий этап.")
+
+
+def _veg_label(item):
+    a = item.get("dish_a_vegetarian")
+    b = item.get("dish_b_vegetarian")
+    if a and b:
+        return "A и B"
+    if a:
+        return "A"
+    if b:
+        return "B"
+    return "—"
 
 
 def page_menu():
     st.title("Меню на 5 дней")
+    st.caption("Текущее активное меню: сохранённое, сгенерированное AI или встроенное демонстрационное.")
     menu = get_active_menu()
     costs = get_dish_costs()
     rows = []
@@ -273,7 +342,18 @@ def page_menu():
                     "Стоимость, сом": "не указано" if cost is None else cost,
                 }
             )
-    st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.dataframe(
+        rows,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "День": st.column_config.TextColumn(width="small"),
+            "Блюдо": st.column_config.TextColumn(width="large"),
+            "Вегетарианское": st.column_config.TextColumn(width="small"),
+            "Жалоба": st.column_config.TextColumn(width="medium"),
+            "Стоимость, сом": st.column_config.TextColumn(width="small"),
+        },
+    )
     ok, errors = validate_menu(menu)
     if ok:
         st.success("Структура меню корректна: 5 дней, по 2 блюда, есть вегетарианский вариант.")
@@ -302,16 +382,17 @@ def page_preorder():
     dish = st.radio(
         "Выберите блюдо",
         options=["A", "B"],
-        format_func=lambda x: f"{x} — {dish_labels[x]}",
+        format_func=lambda x: dish_labels[x] if dish_labels[x].startswith("Блюдо ") else f"{x} — {dish_labels[x]}",
         horizontal=True,
     )
 
-    if st.button("Сохранить заказ"):
+    if st.button("Сохранить заказ", type="primary"):
         if not STUDENT_CODE_RE.match(student_code.strip()):
             st.error("Код должен содержать 3-20 символов: буквы, цифры или дефис.")
         else:
             try:
-                save_order(student_code.strip(), meal_date.isoformat(), dish)
+                with st.spinner("Сохранение..."):
+                    save_order(student_code.strip(), meal_date.isoformat(), dish)
                 st.success("Заказ сохранён. Повторный выбор того же кода на эту дату обновит заказ, а не создаст дубликат.")
             except ValueError as exc:
                 st.error(str(exc))
@@ -352,8 +433,11 @@ def page_kitchen():
 
     c5, c6, c7 = st.columns(3)
     c5.metric("Базовые порции", summary["base_portions"])
-    c6.metric("Резерв 5%", summary["buffer"])
+    c6.metric("Резерв 5%, порций", summary["buffer"])
     c7.metric("Итого порций", summary["total_portions"])
+
+    if counts["total"] == 0:
+        st.info("Заказов на выбранную дату пока нет. Можно загрузить тестовые данные ниже.")
 
     st.write(
         f"Распределение по заказам: A — {summary['a_orders']}, B — {summary['b_orders']}. "
@@ -369,14 +453,26 @@ def page_kitchen():
     if expected == 0:
         st.warning("Укажите ожидаемое число обедающих, иначе расчёт неполный.")
 
+    if summary["total_orders"] == 0:
+        st.info("Заказов на дату пока нет. Загрузите тестовые данные ниже или дождитесь предзаказов.")
     with st.expander("Тестовые данные"):
         if st.button("Загрузить тестовые заказы на выбранную дату"):
-            seed_demo_orders(date_str)
+            with st.spinner("Загрузка..."):
+                seed_demo_orders(date_str)
             st.success("Тестовые заказы добавлены.")
             st.rerun()
-        if st.button("Сбросить демонстрационные данные (заказы и цены)"):
-            reset_demo_data()
+        reset_confirmed = st.checkbox(
+            "Подтверждаю сброс всех демонстрационных данных",
+            key="reset_confirmed",
+        )
+        if st.button(
+            "Сбросить демонстрационные данные (заказы и цены)",
+            disabled=not reset_confirmed,
+        ):
+            with st.spinner("Сброс..."):
+                reset_demo_data()
             st.success("Демонстрационные данные очищены.")
+            st.session_state["reset_confirmed"] = False
             st.rerun()
 
 
@@ -392,9 +488,10 @@ def page_leftovers():
         submitted = st.form_submit_button("Сохранить остатки")
     if submitted:
         try:
-            save_leftover(record_date.isoformat(), waste_mass, int(leftover_portions), note)
+            with st.spinner("Сохранение..."):
+                save_leftover(record_date.isoformat(), waste_mass, int(leftover_portions), note)
             st.success("Запись сохранена.")
-        except (ValueError, TypeError) as exc:
+        except Exception as exc:
             st.error(str(exc))
 
     records = get_leftovers()
@@ -412,6 +509,12 @@ def page_leftovers():
             ],
             use_container_width=True,
             hide_index=True,
+            column_config={
+                "Дата": st.column_config.TextColumn(width="small"),
+                "Отходы, кг": st.column_config.NumberColumn(width="small"),
+                "Порций осталось": st.column_config.NumberColumn(width="small"),
+                "Примечание": st.column_config.TextColumn(width="large"),
+            },
         )
         masses = [r["waste_mass_kg"] for r in records if r["waste_mass_kg"] is not None]
         if masses:
@@ -441,10 +544,15 @@ def page_economics():
         ],
         use_container_width=True,
         hide_index=True,
+        column_config={
+            "День": st.column_config.TextColumn(width="small"),
+            "Отходы, %": st.column_config.NumberColumn(width="small"),
+            "Потери, сом": st.column_config.TextColumn(width="small"),
+        },
     )
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Неделя, сом", fmt_money(report["week_total"]))
-    c2.metric("Год, продукты, сом", fmt_money(report["year_waste"]))
+    c2.metric("Год (продукты), сом", fmt_money(report["year_waste"]))
     c3.metric("Утилизация за год, сом", fmt_money(report["util_year"]))
     c4.metric("Сумма категорий, сом", fmt_money(report["combined_losses"]))
 
@@ -460,6 +568,11 @@ def page_economics():
         ],
         use_container_width=True,
         hide_index=True,
+        column_config={
+            "Цель по отходам": st.column_config.TextColumn(width="small"),
+            "Экономия в неделю, сом": st.column_config.TextColumn(width="small"),
+            "Экономия за год, сом": st.column_config.TextColumn(width="small"),
+        },
     )
     st.info("Сценарии — модельные оценки. Потенциальная экономия не является подтверждённым результатом.")
 
@@ -502,13 +615,15 @@ def page_budget():
                 )
             edited[key] = (val, known)
 
-    if st.button("Сохранить стоимости"):
+    st.caption("Отметьте «известна», чтобы учесть стоимость. Значение 0 может быть валидной ценой.")
+    if st.button("Сохранить стоимости", type="primary"):
         try:
             for (day, letter), (val, known) in edited.items():
-                save_dish_cost(day, letter, val if known else None)
+                with st.spinner("Сохранение..."):
+                    save_dish_cost(day, letter, val if known else None)
             st.success("Стоимости сохранены локально.")
             st.rerun()
-        except (ValueError, TypeError) as exc:
+        except Exception as exc:
             st.error(str(exc))
 
     saved = get_dish_costs()
@@ -521,7 +636,7 @@ def page_budget():
 
     from src.menu import check_budget
 
-    report = check_budget(cost_dict)
+    report = check_budget(cost_dict, menu=get_active_menu())
     st.subheader("Результат проверки")
     status = status_for_budget(report)
     icon = {"OK": "✅", "ПРЕВЫШЕНИЕ ЛИМИТА": "⛔", "НЕДОСТАТОЧНО ДАННЫХ": "⚠️"}.get(status, "")
@@ -538,6 +653,12 @@ def page_budget():
         ],
         use_container_width=True,
         hide_index=True,
+        column_config={
+            "День": st.column_config.TextColumn(width="small"),
+            "Блюдо": st.column_config.TextColumn(width="small"),
+            "Стоимость": st.column_config.TextColumn(width="small"),
+            "Статус": st.column_config.TextColumn(width="medium"),
+        },
     )
     if report["has_over_limit"]:
         st.error("Есть превышение лимита себестоимости.")
@@ -557,7 +678,7 @@ def page_ai():
 
     col1, col2 = st.columns(2)
     generate_clicked = col1.button("Сформировать предложение меню")
-    template_clicked = col2.button("Показать демонстрационный шаблон (не AI)")
+    template_clicked = col2.button("Показать демонстрационный шаблон")
 
     result = st.session_state.get("ai_result")
     if generate_clicked:
@@ -576,11 +697,15 @@ def page_ai():
                 st.session_state.pop("ai_result", None)
 
     if template_clicked:
+        if st.session_state.get("ai_result"):
+            st.warning("Демонстрационный шаблон заменит текущее предложение меню.")
         result = demo_template_menu()
         st.session_state["ai_result"] = result
         st.info("Показан демонстрационный шаблон. Это не результат обращения к языковой модели.")
 
     result = st.session_state.get("ai_result")
+    if not result:
+        st.info("Нажмите одну из кнопок выше, чтобы получить предложение меню.")
     if result:
         st.subheader("Предпросмотр меню")
         st.caption(f"Источник: {result['source']} (provider={result.get('provider')}, model={result.get('model')})")
@@ -590,13 +715,20 @@ def page_ai():
                     "День": m["day"],
                     "Блюдо A": m["dish_a"],
                     "Блюдо B": m["dish_b"],
-                    "Вегетарианское": ("A" if m.get("dish_a_vegetarian") else "") + (" / B" if m.get("dish_b_vegetarian") else ""),
+                    "Вегетарианское": _veg_label(m),
                     "Жалоба": m["complaint_cluster"],
                 }
                 for m in result["menu"]
             ],
             use_container_width=True,
             hide_index=True,
+            column_config={
+                "День": st.column_config.TextColumn(width="small"),
+                "Блюдо A": st.column_config.TextColumn(width="large"),
+                "Блюдо B": st.column_config.TextColumn(width="large"),
+                "Вегетарианское": st.column_config.TextColumn(width="small"),
+                "Жалоба": st.column_config.TextColumn(width="medium"),
+            },
         )
         ok, errors = validate_ai_menu(result["menu"])
         if ok:
@@ -604,23 +736,52 @@ def page_ai():
         else:
             st.error("; ".join(errors))
 
-        if result["source"] == "ai" and st.button("Сохранить как текущее меню"):
+        if result["source"] == "ai" and st.button("Сохранить как текущее меню", type="primary"):
             try:
-                save_menu(result["menu"])
+                with st.spinner("Сохранение..."):
+                    save_menu(result["menu"])
                 st.success("Меню сохранено. Обновите страницу «Меню».")
             except ValueError as exc:
                 st.error(str(exc))
+        if result["source"] != "ai":
+            st.caption("Демонстрационный шаблон нельзя сохранить как текущее меню — сформируйте меню через AI.")
 
         if result.get("raw_text"):
             with st.expander("Сырой ответ модели"):
                 st.code(result["raw_text"])
 
 
+PAGES = ["Главная", "Меню", "Предзаказ", "Кухня", "Остатки", "Экономика", "Проверка бюджета", "AI-меню"]
+
 def main():
-    page = st.sidebar.radio(
-        "Раздел",
-        ["Главная", "Меню", "Предзаказ", "Кухня", "Отходы", "Экономика", "Проверка бюджета", "AI-меню"],
-    )
+    if "page" not in st.session_state:
+        qp = st.query_params.get("page")
+        st.session_state["page"] = qp if qp in PAGES else "Главная"
+    with st.sidebar:
+        st.markdown("### 🍽️ Умная столовая")
+        st.caption("Демонстрационный прототип")
+        st.divider()
+        page = st.radio(
+            "Раздел",
+            PAGES,
+            key="page",
+            label_visibility="collapsed",
+        )
+        try:
+            st.query_params["page"] = page
+        except Exception:
+            pass
+        st.divider()
+        try:
+            _cfg = get_ai_config()
+            if _cfg["configured"]:
+                st.success(f"AI: {_cfg['provider']}/{_cfg['model']}")
+            else:
+                st.warning("AI: не настроен")
+        except Exception:
+            st.info("AI: статус неизвестен")
+        st.caption("v1.0 · локальный прототип")
+
     if page == "Главная":
         page_home()
     elif page == "Меню":
@@ -629,7 +790,7 @@ def main():
         page_preorder()
     elif page == "Кухня":
         page_kitchen()
-    elif page == "Отходы":
+    elif page == "Остатки":
         page_leftovers()
     elif page == "Экономика":
         page_economics()

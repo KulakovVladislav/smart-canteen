@@ -10,7 +10,7 @@ import urllib.parse
 import urllib.request
 from datetime import date, timedelta
 
-from src.menu import get_menu, day_for_date
+from src.menu import get_menu, day_for_date, get_active_menu
 from src.preorder import kitchen_summary
 from src.storage import get_orders, save_order
 
@@ -112,16 +112,17 @@ def build_order_keyboard(meal_date):
     }
 
 
-def menu_text_for_date(meal_date):
+def menu_text_for_date(meal_date, db_path=None):
     day_name = day_for_date(meal_date)
+    menu = get_active_menu(db_path)
     lines = [f"Меню на {meal_date.isoformat()} ({day_name or 'день'}):"]
     if day_name:
-        item = next((m for m in get_menu() if m["day"] == day_name), None)
+        item = next((m for m in menu if m["day"] == day_name), None)
         if item:
             lines.append(f"A — {item['dish_a']}")
             lines.append(f"B — {item['dish_b']}")
             return "\n".join(lines)
-    for m in get_menu():
+    for m in menu:
         lines.append(f"{m['day']}: A — {m['dish_a']} | B — {m['dish_b']}")
     return "\n".join(lines)
 
@@ -192,7 +193,7 @@ def handle_update(update, token=None, db_path=None):
     if text.startswith("/menu"):
         d = next_school_day()
         if token:
-            send_message(token, chat_id, menu_text_for_date(d))
+            send_message(token, chat_id, menu_text_for_date(d, db_path=db_path))
         return
     if text.startswith("/order"):
         d = next_school_day()
