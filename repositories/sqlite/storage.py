@@ -20,7 +20,9 @@ def get_db_path(db_path=None):
 
 def get_connection(db_path=None):
     path = get_db_path(db_path)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    parent = os.path.dirname(path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
     conn = sqlite3.connect(path, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout=30000")
@@ -164,8 +166,25 @@ def init_db(db_path=None):
             """
             CREATE TABLE IF NOT EXISTS telegram_subscribers
             (
-                chat_id    TEXT PRIMARY KEY,
-                created_at TEXT NOT NULL
+                chat_id
+                TEXT
+                PRIMARY
+                KEY,
+                created_at
+                TEXT
+                NOT
+                NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS scheduled_jobs
+            (
+                job_name TEXT NOT NULL,
+                run_date TEXT NOT NULL,
+                completed_at TEXT NOT NULL,
+                PRIMARY KEY (job_name, run_date)
             )
             """
         )
@@ -189,8 +208,10 @@ def save_order(student_code, meal_date, dish, db_path=None):
         raise ValueError("dish must be A or B")
     if not student_code:
         raise ValueError("student_code is required")
-    if not meal_date:
-        raise ValueError("meal_date is required")
+    try:
+        meal_date = date.fromisoformat(meal_date).isoformat()
+    except ValueError as exc:
+        raise ValueError("meal_date must use YYYY-MM-DD") from exc
 
     init_db(db_path)
     conn = get_connection(db_path)
@@ -209,6 +230,28 @@ def save_order(student_code, meal_date, dish, db_path=None):
         conn.commit()
     finally:
         conn.close()
+
+
+def delete_order(student_code, meal_date, db_path=None):
+    student_code = str(student_code).strip()
+    meal_date = str(meal_date).strip()
+    if not student_code or not meal_date:
+        raise ValueError("student_code and meal_date are required")
+    init_db(db_path)
+    conn = get_connection(db_path)
+    try:
+        cur = conn.execute(
+            "DELETE FROM orders WHERE student_code = ? AND meal_date = ?",
+            (student_code, meal_date),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def cancel_order(student_code, meal_date, db_path=None):
+    return delete_order(student_code, meal_date, db_path=db_path)
 
 
 def get_orders(meal_date=None, db_path=None):
@@ -264,6 +307,52 @@ def save_dish_cost(day, dish, cost, db_path=None):
             (day, dish, value, _now()),
         )
         conn.commit()
+    finally:
+        conn.close()
+
+
+def save_dish_costs(costs, db_path=None):
+    """Save a full cost sheet atomically.
+
+    ``costs`` maps ``(day, dish)`` to a number or ``None`` for an unknown
+    value. A validation error leaves the previous sheet untouched.
+    """
+    normalized = []
+    for key, cost in dict(costs).items():
+        try:
+            day, dish = key
+        except (TypeError, ValueError) as exc:
+            raise ValueError("cost keys must be (day, dish) pairs") from exc
+        day = str(day).strip()
+        dish = str(dish).strip().upper()
+        if not day or dish not in ("A", "B"):
+            raise ValueError("each cost requires a day and dish A or B")
+        if cost is None or cost == "":
+            value = None
+        else:
+            try:
+                value = float(cost)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("cost must be a number") from exc
+            if value < 0:
+                raise ValueError("cost must be non-negative")
+        normalized.append((day, dish, value, _now()))
+
+    init_db(db_path)
+    conn = get_connection(db_path)
+    try:
+        conn.executemany(
+            """
+            INSERT INTO dish_costs (day, dish, cost, updated_at)
+            VALUES (?, ?, ?, ?) ON CONFLICT(day, dish) DO
+            UPDATE SET cost = excluded.cost, updated_at = excluded.updated_at
+            """,
+            normalized,
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
@@ -356,6 +445,18 @@ def save_menu(menu, db_path=None):
     init_db(db_path)
     conn = get_connection(db_path)
     try:
+        old = {
+            row["day"]: (row["dish_a"], row["dish_b"])
+            for row in conn.execute("SELECT day, dish_a, dish_b FROM menu_items")
+        }
+        changed_days = [
+            str(item["day"]).strip()
+            for item in menu
+            if old.get(str(item["day"]).strip())
+            != (str(item["dish_a"]).strip(), str(item["dish_b"]).strip())
+        ]
+        if changed_days:
+            conn.executemany("DELETE FROM dish_costs WHERE day = ?", [(day,) for day in changed_days])
         conn.execute("DELETE FROM menu_items")
         for item in menu:
             conn.execute(
@@ -378,6 +479,9 @@ def save_menu(menu, db_path=None):
     except sqlite3.IntegrityError as exc:
         conn.rollback()
         raise ValueError("menu contains duplicate or invalid day") from exc
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
@@ -427,10 +531,11 @@ def get_saved_menu(db_path=None):
         # Сохранённое меню ограничено каноническими пятью днями.
         # Дополнительные/некорректные записи не добавляются, чтобы
         # не было дублирования дней в интерфейсе.
-        return result if result else None
+        if not result:
+            return None
+        return result
     finally:
         conn.close()
-
 
 
 def subscribe_chat(chat_id, db_path=None):
@@ -449,6 +554,20 @@ def subscribe_chat(chat_id, db_path=None):
         conn.close()
 
 
+def unsubscribe_chat(chat_id, db_path=None):
+    chat_id = str(chat_id).strip()
+    if not chat_id:
+        raise ValueError("chat_id is required")
+    init_db(db_path)
+    conn = get_connection(db_path)
+    try:
+        cursor = conn.execute("DELETE FROM telegram_subscribers WHERE chat_id = ?", (chat_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
 def get_subscribers(db_path=None):
     init_db(db_path)
     conn = get_connection(db_path)
@@ -458,6 +577,47 @@ def get_subscribers(db_path=None):
     finally:
         conn.close()
 
+
+def was_scheduled_job_completed(job_name, run_date, db_path=None):
+    """Return whether a scheduled job was completed on a given ISO date."""
+    job_name = str(job_name or "").strip()
+    try:
+        normalized_date = date.fromisoformat(str(run_date).strip()).isoformat()
+    except (TypeError, ValueError) as exc:
+        raise ValueError("run_date must use YYYY-MM-DD") from exc
+    if not job_name:
+        raise ValueError("job_name is required")
+    init_db(db_path)
+    conn = get_connection(db_path)
+    try:
+        row = conn.execute(
+            "SELECT 1 FROM scheduled_jobs WHERE job_name = ? AND run_date = ?",
+            (job_name, normalized_date),
+        ).fetchone()
+        return row is not None
+    finally:
+        conn.close()
+
+
+def mark_scheduled_job_completed(job_name, run_date, db_path=None):
+    """Persist a successful scheduled run so a restart does not duplicate it."""
+    job_name = str(job_name or "").strip()
+    try:
+        normalized_date = date.fromisoformat(str(run_date).strip()).isoformat()
+    except (TypeError, ValueError) as exc:
+        raise ValueError("run_date must use YYYY-MM-DD") from exc
+    if not job_name:
+        raise ValueError("job_name is required")
+    init_db(db_path)
+    conn = get_connection(db_path)
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO scheduled_jobs (job_name, run_date, completed_at) VALUES (?, ?, ?)",
+            (job_name, normalized_date, _now()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 _DEPRECATED_ALIASES = {
@@ -497,3 +657,40 @@ def seed_demo_orders(meal_date, db_path=None):
     choices = ["A", "A", "B", "B", "A"]
     for code, dish in zip(samples, choices):
         save_order(code, meal_date, dish, db_path=db_path)
+
+
+def seed_presentation_data(meal_date, db_path=None):
+    """Replace local demo data with one deterministic, presentation-ready dataset.
+
+    The function is intentionally explicit: it clears only orders, dish costs and
+    leftover measurements, never the saved menu or Telegram subscriber list.
+    """
+    try:
+        target = date.fromisoformat(str(meal_date).strip())
+    except (TypeError, ValueError) as exc:
+        raise ValueError("meal_date must use YYYY-MM-DD") from exc
+
+    reset_demo_data(db_path=db_path)
+    choices = ("A", "B", "A", "A", "B", "A", "B", "A", "B", "A", "B", "A", "A", "B", "B", "A", "B", "A")
+    for index, dish in enumerate(choices, start=1):
+        save_order(f"DEMO-{index:03d}", target.isoformat(), dish, db_path=db_path)
+
+    costs = (128, 136, 122, 130, 116, 124, 134, 120, 118, 126)
+    for item, pair in zip(MENU, zip(costs[::2], costs[1::2])):
+        save_dish_cost(item["day"], "A", pair[0], db_path=db_path)
+        save_dish_cost(item["day"], "B", pair[1], db_path=db_path)
+
+    for days_back, mass, portions, note in (
+        (3, 58.0, 36, "До предзаказа"),
+        (2, 51.5, 24, "После уточнения меню"),
+        (1, 46.0, 18, "Предзаказы учтены"),
+    ):
+        record_date = date.fromordinal(target.toordinal() - days_back).isoformat()
+        save_leftover(record_date, mass, portions, note, db_path=db_path)
+
+    return {
+        "meal_date": target.isoformat(),
+        "orders": len(choices),
+        "costs": len(costs),
+        "leftovers": 3,
+    }

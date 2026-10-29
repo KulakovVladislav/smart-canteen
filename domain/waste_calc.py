@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # Расчёт потерь от отходов столовой. Стандартная библиотека Python.
 import csv
+import math
 import os
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -8,12 +9,26 @@ CSV_PATH = os.path.join(BASE_DIR, "data", "waste_by_day.csv")
 
 # Параметры школы. Значения по умолчанию соответствуют кейсу; могут быть
 # переопределены через переменные окружения без изменения кода.
-BUDGET_PER_DAY = int(os.environ.get("CANTEEN_DAILY_BUDGET", "70000"))
-DAYS_PER_WEEK = int(os.environ.get("CANTEEN_DAYS_PER_WEEK", "5"))
-WEEKS_PER_YEAR = int(os.environ.get("CANTEEN_WEEKS_PER_YEAR", "35"))
-SCHOOL_DAYS_PER_YEAR = int(os.environ.get("CANTEEN_SCHOOL_DAYS_PER_YEAR", "175"))
-WASTE_KG_PER_DAY = float(os.environ.get("CANTEEN_WASTE_KG_PER_DAY", "60"))
-WASTE_COST_PER_KG = float(os.environ.get("CANTEEN_WASTE_COST_PER_KG", "15"))
+def _env_int(name, default):
+    try:
+        return int(str(os.environ.get(name, default)).strip())
+    except (TypeError, ValueError):
+        return int(default)
+
+
+def _env_float(name, default):
+    try:
+        return float(str(os.environ.get(name, default)).strip())
+    except (TypeError, ValueError):
+        return float(default)
+
+
+BUDGET_PER_DAY = _env_int("CANTEEN_DAILY_BUDGET", "70000")
+DAYS_PER_WEEK = _env_int("CANTEEN_DAYS_PER_WEEK", "5")
+WEEKS_PER_YEAR = _env_int("CANTEEN_WEEKS_PER_YEAR", "35")
+SCHOOL_DAYS_PER_YEAR = _env_int("CANTEEN_SCHOOL_DAYS_PER_YEAR", "175")
+WASTE_KG_PER_DAY = _env_float("CANTEEN_WASTE_KG_PER_DAY", "60")
+WASTE_COST_PER_KG = _env_float("CANTEEN_WASTE_COST_PER_KG", "15")
 
 REQUIRED_COLUMNS = {"day", "waste_percent"}
 
@@ -39,8 +54,8 @@ def load_waste():
                 raise ValueError(
                     f"waste CSV row {line_no}: waste_percent must be a number"
                 ) from exc
-            if pct < 0:
-                raise ValueError(f"waste CSV row {line_no}: waste_percent must be non-negative")
+            if not math.isfinite(pct) or not 0 <= pct <= 100:
+                raise ValueError(f"waste CSV row {line_no}: waste_percent must be between 0 and 100")
             rows.append((day, pct))
     if not rows:
         raise ValueError("waste CSV contains no data rows")
@@ -52,25 +67,30 @@ def fmt(x):
 
 
 def compute_report():
+    budget_per_day = _env_int("CANTEEN_DAILY_BUDGET", BUDGET_PER_DAY)
+    days_per_week = _env_int("CANTEEN_DAYS_PER_WEEK", DAYS_PER_WEEK)
+    weeks_per_year = _env_int("CANTEEN_WEEKS_PER_YEAR", WEEKS_PER_YEAR)
+    school_days_per_year = _env_int("CANTEEN_SCHOOL_DAYS_PER_YEAR", SCHOOL_DAYS_PER_YEAR)
+    waste_kg_per_day = _env_float("CANTEEN_WASTE_KG_PER_DAY", WASTE_KG_PER_DAY)
+    waste_cost_per_kg = _env_float("CANTEEN_WASTE_COST_PER_KG", WASTE_COST_PER_KG)
+
     rows = load_waste()
     week_total = 0
     day_rows = []
     for day, pct in rows:
-        loss = BUDGET_PER_DAY * pct / 100.0
+        loss = budget_per_day * pct / 100.0
         week_total += loss
         day_rows.append({"day": day, "pct": pct, "loss": loss})
-    year_waste = week_total * WEEKS_PER_YEAR
-    util_day = WASTE_KG_PER_DAY * WASTE_COST_PER_KG
-    util_year = util_day * SCHOOL_DAYS_PER_YEAR
-    # Это разные статьи расходов. Их сумма показывается только как объединённая
-    # оценка, потому что двойной учёт нельзя исключить без исходных данных.
+    year_waste = week_total * weeks_per_year
+    util_day = waste_kg_per_day * waste_cost_per_kg
+    util_year = util_day * school_days_per_year
     combined_losses = year_waste + util_year
     avg_pct = sum(p for _, p in rows) / len(rows) if rows else 0.0
-    weekly_budget = BUDGET_PER_DAY * DAYS_PER_WEEK
+    weekly_budget = budget_per_day * days_per_week
     scenarios = []
     for target in (15, 10, 5):
         saving_week = max(0.0, (avg_pct - target) / 100.0 * weekly_budget)
-        saving_year = saving_week * WEEKS_PER_YEAR
+        saving_year = saving_week * weeks_per_year
         scenarios.append({"target": target, "saving_week": saving_week, "saving_year": saving_year})
     return {
         "rows": day_rows,
@@ -83,16 +103,24 @@ def compute_report():
         "total": combined_losses,
         "avg_pct": avg_pct,
         "scenarios": scenarios,
+        "assumptions": {
+            "budget_per_day": budget_per_day,
+            "days_per_week": days_per_week,
+            "weeks_per_year": weeks_per_year,
+            "school_days_per_year": school_days_per_year,
+            "waste_kg_per_day": waste_kg_per_day,
+            "waste_cost_per_kg": waste_cost_per_kg,
+        },
     }
 
 
 def main():
     report = compute_report()
-    print("Потери по дням (% от бюджета 70 000 сом):")
+    print(f"Потери по дням (% от бюджета {fmt(BUDGET_PER_DAY)} сом):")
     for r in report["rows"]:
         print(f"  {r['day']}: {r['pct']:g}% -> {fmt(r['loss'])} сом")
     print(f"Неделя: {fmt(report['week_total'])} сом")
-    print(f"Год (35 недель), продукты: {fmt(report['year_waste'])} сом")
+    print(f"Год ({WEEKS_PER_YEAR} недель), продукты: {fmt(report['year_waste'])} сом")
     print(f"Утилизация в день: {fmt(report['util_day'])} сом")
     print(f"Утилизация за год: {fmt(report['util_year'])} сом")
     print(f"Сумма категорий (с риском двойного учёта): {fmt(report['combined_losses'])} сом")

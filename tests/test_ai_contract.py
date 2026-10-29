@@ -161,6 +161,14 @@ class TestAIContract(unittest.TestCase):
         ok2, errors2 = validate_menu(menu2)
         self.assertTrue(ok2, errors2)
 
+    def test_tuple_keyed_storage_costs_are_checked(self):
+        menu = [dict(item) for item in MENU]
+        prices = {(item["day"], letter): 100 for item in menu for letter in ("A", "B")}
+        prices[("Понедельник", "A")] = 141
+        ok, errors = validate_ai_menu(menu, costs=prices)
+        self.assertFalse(ok)
+        self.assertTrue(any("Понедельник / блюдо A" in error for error in errors))
+
     def test_menu_without_vegetarian_not_rejected_for_that_reason(self):
         menu = [dict(item) for item in MENU]
         for item in menu:

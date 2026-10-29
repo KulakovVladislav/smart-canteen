@@ -26,6 +26,7 @@ def _load_dotenv():
     except OSError:
         pass
 
+
 _load_dotenv()
 from ui.streamlit.main import main  # noqa
 

@@ -1,13 +1,7 @@
-/* Умная столовая — дизайн-система Streamlit.
- *
- * Палитра совпадает с .streamlit/config.toml. Шрифт: Space Grotesk для
- * заголовков, Inter для текста. Токены используют light-dark() и наследуют
- * color-scheme от .stApp, поэтому светлая/тёмная темы переключаются вместе.
- */
-
+/* Умная столовая — дизайн-система Streamlit. */
 @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap");
 
-:root {
+.stApp {
     /* Типографика */
     --sc-font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --sc-heading-font: "Space Grotesk", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -32,50 +26,28 @@
     --sc-radius-lg: 18px;
     --sc-radius-xl: 24px;
 
-    /* Светлая тема — базовые значения */
-    --sc-bg: #f4f5f3;
-    --sc-bg-soft: #eceee8;
-    --sc-card: #ffffff;
-    --sc-surface: #f7f8f5;
-    --sc-text: #1b2a26;
-    --sc-text-soft: #3d4f48;
-    --sc-muted: #5a6a62;
-    --sc-primary: #0f5b4f;
-    --sc-primary-soft: #e8f4f1;
-    --sc-success: #1f8a5a;
-    --sc-warning: #9a6f1f;
-    --sc-danger: #b33a2b;
-    --sc-border: #d2d7d0;
-    --sc-divider: #dde1da;
-    --sc-shadow-sm: 0 1px 2px rgba(27, 42, 38, 0.05);
-    --sc-shadow-md: 0 8px 24px rgba(27, 42, 38, 0.08);
-    --sc-shadow-lg: 0 16px 40px rgba(27, 42, 38, 0.10);
-}
+    /* Цветовые токены: следуют за color-scheme Streamlit, а не за ОС */
+    --sc-bg: light-dark(#f4f5f3, #111418);
+    --sc-bg-soft: light-dark(#eceee8, #1a1e24);
+    --sc-card: light-dark(#ffffff, #181c22);
+    --sc-surface: light-dark(#f7f8f5, #1f242b);
+    --sc-text: light-dark(#1b2a26, #e6e8ec);
+    --sc-text-soft: light-dark(#3d4f48, #b8bec7);
+    --sc-muted: light-dark(#4a5a52, #8a93a0);
+    --sc-primary: light-dark(#0f5b4f, #2a9d8f);
+    --sc-primary-hover: light-dark(#0c4d43, #33b0a0);
+    --sc-primary-soft: light-dark(#e8f4f1, #1a3a36);
+    --sc-primary-text: light-dark(#ffffff, #0b1a18);
+    --sc-primary-shadow: light-dark(0 2px 8px rgba(15, 91, 79, 0.25), 0 2px 8px rgba(42, 157, 143, 0.35));
+    --sc-success: light-dark(#1f8a5a, #3bb273);
+    --sc-warning: light-dark(#9a6f1f, #d4a04a);
+    --sc-danger: light-dark(#b33a2b, #e06a5a);
+    --sc-border: light-dark(#d2d7d0, #2b313a);
+    --sc-divider: light-dark(#dde1da, #232830);
+    --sc-shadow-sm: light-dark(0 1px 2px rgba(27, 42, 38, 0.05), 0 1px 2px rgba(0, 0, 0, 0.4));
+    --sc-shadow-md: light-dark(0 8px 24px rgba(27, 42, 38, 0.08), 0 8px 24px rgba(0, 0, 0, 0.5));
+    --sc-shadow-lg: light-dark(0 16px 40px rgba(27, 42, 38, 0.10), 0 16px 40px rgba(0, 0, 0, 0.6));
 
-@supports (color: light-dark(#ffffff, #000000)) {
-    .stApp {
-        --sc-bg: light-dark(#f4f5f3, #111418);
-        --sc-bg-soft: light-dark(#eceee8, #1a1e24);
-        --sc-card: light-dark(#ffffff, #181c22);
-        --sc-surface: light-dark(#f7f8f5, #1f242b);
-        --sc-text: light-dark(#1b2a26, #e6e8ec);
-        --sc-text-soft: light-dark(#3d4f48, #b8bec7);
-        --sc-muted: light-dark(#5a6a62, #8a93a0);
-        --sc-primary: light-dark(#0f5b4f, #2a9d8f);
-        --sc-primary-soft: light-dark(#e8f4f1, #1a3a36);
-        --sc-success: light-dark(#1f8a5a, #3bb273);
-        --sc-warning: light-dark(#9a6f1f, #d4a04a);
-        --sc-danger: light-dark(#b33a2b, #e06a5a);
-        --sc-border: light-dark(#d2d7d0, #2b313a);
-        --sc-divider: light-dark(#dde1da, #232830);
-        --sc-shadow-sm: 0 1px 2px light-dark(rgba(27, 42, 38, 0.05), rgba(0, 0, 0, 0.4));
-        --sc-shadow-md: 0 8px 24px light-dark(rgba(27, 42, 38, 0.08), rgba(0, 0, 0, 0.5));
-        --sc-shadow-lg: 0 16px 40px light-dark(rgba(27, 42, 38, 0.10), rgba(0, 0, 0, 0.6));
-    }
-}
-
-/* Основа */
-.stApp {
     background: var(--sc-bg);
     color: var(--sc-text);
     font-family: var(--sc-font);
@@ -84,7 +56,8 @@
 }
 
 .block-container {
-    max-width: 1180px;
+    max-width: 1280px !important;
+    margin-inline: auto !important;
     padding-top: var(--sc-space-xl);
     padding-bottom: calc(var(--sc-space-xl) + var(--sc-space-lg));
     padding-left: var(--sc-space-lg);
@@ -137,19 +110,13 @@
     line-height: 1.5;
 }
 
-/* Карточки: контейнеры с border=True */
+/* Карточки */
 .stApp [data-testid="stVerticalBlockBorderWrapper"] {
     background: var(--sc-card);
     border: 1px solid var(--sc-border);
     border-radius: var(--sc-radius-lg);
     box-shadow: var(--sc-shadow-sm);
     padding: var(--sc-space-lg);
-    transition: box-shadow 0.2s ease, border-color 0.2s ease;
-}
-
-.stApp [data-testid="stVerticalBlockBorderWrapper"]:hover {
-    box-shadow: var(--sc-shadow-md);
-    border-color: var(--sc-divider);
 }
 
 .stApp [data-testid="stForm"] {
@@ -216,7 +183,6 @@
 .stApp [data-testid="stFormSubmitButton"] button {
     border-radius: var(--sc-radius);
     font-weight: 500;
-    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
 }
 
 .stApp [data-testid="stButton"] button:active:not(:disabled),
@@ -227,14 +193,13 @@
 .stApp [data-testid^="stBaseButton-primary"] {
     background: var(--sc-primary);
     border-color: var(--sc-primary);
-    color: #ffffff;
-    box-shadow: 0 2px 8px rgba(15, 91, 79, 0.25);
+    color: var(--sc-primary-text);
+    box-shadow: var(--sc-primary-shadow);
 }
 
 .stApp [data-testid^="stBaseButton-primary"]:hover:not(:disabled) {
-    background: #0c4d43;
-    border-color: #0c4d43;
-    box-shadow: 0 4px 12px rgba(15, 91, 79, 0.3);
+    background: var(--sc-primary-hover);
+    border-color: var(--sc-primary-hover);
 }
 
 .stApp [data-testid^="stBaseButton-secondary"] {
@@ -278,11 +243,6 @@
     box-shadow: 0 0 0 2px var(--sc-primary-soft);
 }
 
-/* Радио / селект */
-.stApp [data-testid="stRadio"] [data-testid="stMarkdownContainer"] p {
-    color: var(--sc-text-soft);
-}
-
 /* Сайдбар */
 .stApp [data-testid="stSidebar"],
 .stApp section[data-testid="stSidebar"],
@@ -294,71 +254,34 @@
     border-right: 1px solid var(--sc-divider);
 }
 
-.stApp [data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+.stApp [data-testid="stSidebar"] [data-testid="stSidebarContent"],
+.stApp [data-testid="stSidebar"] [data-testid="stSidebarHeader"],
+.stApp [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
     background: var(--sc-bg-soft) !important;
+}
+
+.stApp [data-testid="stSidebar"] [data-testid="stSidebarContent"] {
     padding-top: var(--sc-space-md);
     padding-bottom: var(--sc-space-lg);
 }
 
 .stApp [data-testid="stSidebar"] [data-testid="stSidebarHeader"] {
-    background: var(--sc-bg-soft) !important;
     padding-bottom: var(--sc-space-sm);
 }
 
 .stApp [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
-    background: var(--sc-bg-soft) !important;
     padding-top: var(--sc-space-md);
     padding-bottom: var(--sc-space-lg);
 }
 
-.stApp [data-testid="stSidebar"] [data-testid="stRadioGroup"] {
-    gap: 2px;
-}
-
-.stApp [data-testid="stSidebar"] [data-testid="stRadioOption"] {
-    display: block !important;
-    width: 100% !important;
-    padding: var(--sc-space-sm) var(--sc-space) !important;
-    border-radius: var(--sc-radius-sm) !important;
-    color: var(--sc-text-soft) !important;
-    font-weight: 500 !important;
-    background: transparent !important;
-    transition: background-color 0.15s ease, color 0.15s ease;
-}
-
-.stApp [data-testid="stSidebar"] [data-testid="stRadioOption"] input[type="radio"] {
-    position: absolute !important;
-    opacity: 0 !important;
-    width: 0 !important;
-    height: 0 !important;
-    margin: 0 !important;
-    pointer-events: none !important;
-}
-
-.stApp [data-testid="stSidebar"] [data-testid="stRadioOption"]:hover {
-    background: var(--sc-surface) !important;
-    color: var(--sc-text) !important;
-}
-
-.stApp [data-testid="stSidebar"] [data-testid="stRadioOption"]:has(input:checked) {
-    background: var(--sc-primary-soft) !important;
-    color: var(--sc-primary) !important;
-    font-weight: 600 !important;
-}
-
-.stApp [data-testid="stSidebar"] [data-testid="stRadioOption"] [data-testid="stMarkdownContainer"] p {
-    color: inherit;
-}
-
-.stApp [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
-    color: var(--sc-muted);
-}
-
-/* Brand block in sidebar */
 .stApp [data-testid="stSidebar"] h3 {
     color: var(--sc-primary);
     font-size: 1.1rem;
     margin-bottom: var(--sc-space-xs);
+}
+
+.stApp [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
+    color: var(--sc-muted);
 }
 
 /* Focus */
@@ -366,11 +289,6 @@
     outline: 2px solid var(--sc-primary);
     outline-offset: 2px;
     border-radius: var(--sc-radius-sm);
-}
-
-.stApp [data-testid="stSidebar"] [data-testid="stRadioOption"]:has(input:focus-visible) {
-    outline: 2px solid var(--sc-primary);
-    outline-offset: 2px;
 }
 
 /* Адаптивность */
@@ -399,36 +317,85 @@
     }
 }
 
-@media (min-width: 1600px) {
-    .block-container {
-        max-width: 1320px;
-    }
-}
-
-/* Уважение к prefers-reduced-motion */
 @media (prefers-reduced-motion: reduce) {
-    .stApp [data-testid="stButton"] button,
-    .stApp [data-testid="stFormSubmitButton"] button,
-    .stApp [data-testid="stSidebar"] [data-testid="stRadioOption"],
+    .stApp,
     .stApp [data-testid="stVerticalBlockBorderWrapper"] {
-        transition: none;
+        transition: none !important;
     }
 }
 
-/* Тонкая анимация появления основного контента (один раз) */
-@media (prefers-reduced-motion: no-preference) {
-    .block-container {
-        animation: sc-fade-in 0.28s ease-out;
+@media (max-width: 640px) {
+    [data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap !important;
+        gap: var(--sc-space) !important;
+    }
+
+    [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+        flex: 1 1 calc(50% - var(--sc-space)) !important;
+        min-width: 150px !important;
+    }
+
+    .stApp [data-testid="stMetricLabel"],
+    .stApp [data-testid="stMetricValue"] {
+        overflow: visible !important;
+        text-overflow: clip !important;
+        white-space: normal !important;
     }
 }
 
-@keyframes sc-fade-in {
-    from {
-        opacity: 0;
-        transform: translateY(6px);
+/* Accessibility & interaction */
+html {
+    scroll-behavior: auto;
+}
+
+@media (pointer: fine) {
+    html {
+        overscroll-behavior: none;
     }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+}
+
+.stApp button,
+.stApp a,
+.stApp input,
+.stApp textarea,
+.stApp select {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.stApp [data-testid="stMetricValue"] {
+    font-variant-numeric: tabular-nums;
+}
+
+.stApp h1,
+.stApp h2,
+.stApp h3,
+.stApp h4 {
+    text-wrap: balance;
+    scroll-margin-top: 1rem;
+}
+
+.stApp [data-testid="stVerticalBlockBorderWrapper"],
+.stApp [data-testid="stForm"],
+.stApp [data-testid="stExpander"] > details {
+    overscroll-behavior: contain;
+}
+
+/* Sidebar selected nav button text visibility */
+.stApp [data-testid="stSidebar"] [data-testid^="stBaseButton-primary"] {
+    color: var(--sc-primary-text) !important;
+    background: var(--sc-primary) !important;
+    border-color: var(--sc-primary) !important;
+}
+
+
+/* Подписи кнопок наследуют цвет кнопки (исправляет невидимый текст выбранного раздела) */
+.stApp [data-testid="stButton"] button p,
+.stApp [data-testid="stFormSubmitButton"] button p {
+    color: inherit !important;
+}
+
+.stApp [data-testid="stSidebar"] [data-testid^="stBaseButton-primary"],
+.stApp [data-testid="stSidebar"] [data-testid^="stBaseButton-primary"] * {
+    color: var(--sc-primary-text) !important;
 }

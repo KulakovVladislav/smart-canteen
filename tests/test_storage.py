@@ -10,6 +10,11 @@ from src.storage import (
     save_dish_cost,
     save_order,
     get_dish_costs,
+    get_connection,
+    get_leftovers,
+    mark_scheduled_job_completed,
+    seed_presentation_data,
+    was_scheduled_job_completed,
 )
 
 
@@ -72,6 +77,33 @@ class TestStorage(unittest.TestCase):
     def test_invalid_dish(self):
         with self.assertRaises(ValueError):
             save_order("T1", "2026-10-28", "C", db_path=self.db)
+
+    def test_invalid_order_date(self):
+        with self.assertRaises(ValueError):
+            save_order("T1", "tomorrow", "A", db_path=self.db)
+
+    def test_connection_accepts_filename_without_parent(self):
+        conn = get_connection(":memory:")
+        try:
+            self.assertEqual(conn.execute("SELECT 1").fetchone()[0], 1)
+        finally:
+            conn.close()
+
+    def test_presentation_seed_is_complete_and_repeatable(self):
+        seeded = seed_presentation_data("2026-10-28", db_path=self.db)
+        self.assertEqual(seeded["orders"], 18)
+        self.assertEqual(len(get_orders("2026-10-28", db_path=self.db)), 18)
+        self.assertEqual(len(get_dish_costs(db_path=self.db)), 10)
+        self.assertEqual(len(get_leftovers(db_path=self.db)), 3)
+
+        seed_presentation_data("2026-10-28", db_path=self.db)
+        self.assertEqual(len(get_orders("2026-10-28", db_path=self.db)), 18)
+        self.assertEqual(len(get_leftovers(db_path=self.db)), 3)
+
+    def test_scheduled_job_completion_survives_a_restart(self):
+        self.assertFalse(was_scheduled_job_completed("daily_broadcast", "2026-10-28", db_path=self.db))
+        mark_scheduled_job_completed("daily_broadcast", "2026-10-28", db_path=self.db)
+        self.assertTrue(was_scheduled_job_completed("daily_broadcast", "2026-10-28", db_path=self.db))
 
 
 if __name__ == "__main__":

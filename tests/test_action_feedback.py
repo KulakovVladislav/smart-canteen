@@ -39,7 +39,7 @@ class TestActionFeedback(unittest.TestCase):
         self.originals = {
             "get_active_menu": ui_main.get_active_menu,
             "seed_demo_orders": ui_main.seed_demo_orders,
-            "save_dish_cost": ui_main.save_dish_cost,
+            "save_dish_costs": ui_main.save_dish_costs,
         }
         ui_main.get_active_menu = lambda db_path=None: [dict(item) for item in MENU]
 
@@ -92,7 +92,7 @@ class TestActionFeedback(unittest.TestCase):
         self.assertFalse(any("Стоимости сохранены локально" in s.value for s in at.success))
 
     def test_costs_save_error_shown(self):
-        ui_main.save_dish_cost = lambda day, dish, cost, db_path=None: (_ for _ in ()).throw(
+        ui_main.save_dish_costs = lambda costs, db_path=None: (_ for _ in ()).throw(
             ValueError("bad cost")
         )
 

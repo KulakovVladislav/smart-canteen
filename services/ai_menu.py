@@ -169,14 +169,14 @@ def _http_chat(messages, config, timeout=60, retries=2):
         raise last_exc
 
 
-
 def _http_gemini(messages, config, timeout=60):
     """Вызов нативного Gemini REST API (generateContent)."""
     import urllib.request
     import urllib.error
     import json as _json
+    import socket
 
-    url = f"{config['base_url']}/models/{config['model']}:generateContent?key={config['api_key']}"
+    url = f"{config['base_url']}/models/{config['model']}:generateContent"
     # Собираем текст из messages в один промпт (system + user).
     parts = []
     for m in messages:
@@ -192,21 +192,43 @@ def _http_gemini(messages, config, timeout=60):
         "generationConfig": {"temperature": 0.4},
     }
     data = _json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        raw = resp.read().decode("utf-8")
-    parsed = _json.loads(raw)
-    candidates = parsed.get("candidates") or []
-    if not candidates:
-        raise ValueError("empty candidates in Gemini response")
-    content = ""
-    for part in candidates[0].get("content", {}).get("parts", []):
-        if "text" in part:
-            content += part["text"]
-    if not content:
-        raise ValueError("empty content in Gemini response")
-    return content, parsed
+    import time
 
+    last_exc = None
+    for attempt in range(3):
+        req = urllib.request.Request(url, data=data,
+                                     headers={"Content-Type": "application/json", "x-goog-api-key": config["api_key"]},
+                                     method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw = resp.read().decode("utf-8")
+            parsed = _json.loads(raw)
+            candidates = parsed.get("candidates") or []
+            if not candidates:
+                raise ValueError("empty candidates in Gemini response")
+            content = ""
+            for part in candidates[0].get("content", {}).get("parts", []):
+                if "text" in part:
+                    content += part["text"]
+            if not content:
+                raise ValueError("empty content in Gemini response")
+            return content, parsed
+        except (urllib.error.URLError, urllib.error.HTTPError, socket.timeout, TimeoutError,
+                _json.JSONDecodeError) as exc:
+            last_exc = exc
+            if isinstance(exc, urllib.error.HTTPError):
+                try:
+                    body = exc.read().decode("utf-8", errors="replace")
+                except Exception:
+                    body = ""
+                if body:
+                    last_exc = RuntimeError(f"HTTP {exc.code}: {body}")
+            if attempt < 2 and (not isinstance(exc, urllib.error.HTTPError) or exc.code >= 500):
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            raise last_exc
+    if last_exc is not None:  # pragma: no cover
+        raise last_exc
 
 
 def parse_menu_response(text):
@@ -289,6 +311,13 @@ def validate_ai_menu(menu, costs=None, limit=COST_CEILING):
     ok, errors = validate_menu(menu)
     # Дополнительная проверка вегетарианских блюд по дням уже есть в validate_menu
     if costs:
+        # Storage exposes prices as {(day, "A"): value, (day, "B"): value}.
+        # check_budget also accepts a day-keyed mapping, so normalize here.
+        if isinstance(costs, dict) and any(isinstance(key, tuple) and len(key) == 2 for key in costs):
+            costs = {
+                day: {letter: costs.get((day, letter)) for letter in ("A", "B")}
+                for day in DAY_NAMES
+            }
         rows = _extract_costs(costs, menu)
         for day, ca, cb in rows:
             for dish, cost in (("A", ca), ("B", cb)):

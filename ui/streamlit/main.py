@@ -2,7 +2,6 @@
 """Веб-приложение Streamlit для «Умной столовой»."""
 
 import os
-import re
 import sys
 from datetime import date
 
@@ -38,15 +37,12 @@ from repositories.storage import (
     init_db,
     reset_demo_data,
     save_dish_cost,
+    save_dish_costs,
     save_leftover,
     save_menu,
-    save_order,
     seed_demo_orders,
+    seed_presentation_data,
 )
-
-st.set_page_config(page_title="Умная столовая", page_icon="🍽️", layout="wide")
-
-STUDENT_CODE_RE = re.compile(r"^[A-Za-z0-9-]{3,20}$")
 
 CUSTOM_CSS_PATH = os.path.join(os.path.dirname(__file__), "styles.css")
 try:
@@ -55,11 +51,17 @@ try:
 except FileNotFoundError:
     CUSTOM_CSS = ""
 
-st.markdown(f"<style>{CUSTOM_CSS}</style>", unsafe_allow_html=True)
-
 
 def fmt_money(x):
     return f"{x:,.0f}".replace(",", " ")
+
+
+def fmt_money_short(value):
+    if abs(value) >= 1_000_000:
+        return f"{value / 1_000_000:.2f}".replace(".", ",") + " млн"
+    if abs(value) >= 10_000:
+        return f"{value / 1_000:.1f}".replace(".", ",") + " тыс."
+    return fmt_money(value)
 
 
 def status_for_budget(report):
@@ -68,10 +70,6 @@ def status_for_budget(report):
     if report["has_unknown"]:
         return "НЕДОСТАТОЧНО ДАННЫХ"
     return "OK"
-
-
-def _go_to_kitchen():
-    st.session_state["page"] = "Кухня"
 
 
 def _reset_demo_data():
@@ -90,9 +88,21 @@ def _reset_demo_data():
     st.session_state["reset_confirmed"] = False
 
 
+def _seed_presentation_data(meal_date):
+    try:
+        seeded = seed_presentation_data(meal_date.isoformat())
+        st.session_state["demo_seed_flash"] = (
+            "success",
+            f"Демонстрационный набор готов: {seeded['orders']} предзаказов, "
+            f"{seeded['costs']} стоимостей и {seeded['leftovers']} измерения остатков.",
+        )
+    except Exception as exc:
+        st.session_state["demo_seed_flash"] = ("error", f"Не удалось подготовить набор: {exc}")
+
+
 def page_home():
-    st.title("Умная столовая")
-    st.caption("Планирование меню под жалобы учеников, предзаказ, учёт остатков и расчёт экономики.")
+    st.title("Обзор столовой")
+    st.caption("Меню, потери и контроль расходов в одном месте.")
 
     all_orders = get_orders()
     try:
@@ -103,25 +113,26 @@ def page_home():
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Заказов в базе", len(all_orders))
-    col2.metric("Потери за неделю, сом", "—" if report is None else fmt_money(report["week_total"]))
-    col3.metric("Потери за год, сом", "—" if report is None else fmt_money(report["year_waste"]))
-
-    st.write("")
-    st.button("Открыть сводку для кухни 🍳", on_click=_go_to_kitchen, width="stretch")
+    col2.metric("Потери за неделю", "—" if report is None else f"{fmt_money_short(report['week_total'])} сом")
+    col3.metric("Потери за год", "—" if report is None else f"{fmt_money_short(report['year_waste'])} сом")
 
     with st.container(border=True, key="home-menu-card"):
-        st.subheader("Меню на текущую неделю")
+        st.subheader("Меню на неделю")
         menu = get_active_menu()
         st.dataframe(
             [
                 {
-                    "День": m["day"],
-                    "Блюдо A": m["dish_a"],
-                    "Блюдо B": m["dish_b"],
-                    "Вегетарианское": _veg_label(m),
-                    "Жалоба": m["complaint_cluster"],
+                    "День": {
+                        "Понедельник": "Пн",
+                        "Вторник": "Вт",
+                        "Среда": "Ср",
+                        "Четверг": "Чт",
+                        "Пятница": "Пт",
+                    }.get(item["day"], item["day"]),
+                    "Блюдо A": item["dish_a"],
+                    "Блюдо B": item["dish_b"],
                 }
-                for m in menu
+                for item in menu
             ],
             width="stretch",
             hide_index=True,
@@ -129,26 +140,25 @@ def page_home():
                 "День": st.column_config.TextColumn(width="small"),
                 "Блюдо A": st.column_config.TextColumn(width="large"),
                 "Блюдо B": st.column_config.TextColumn(width="large"),
-                "Вегетарианское": st.column_config.TextColumn(width="small"),
-                "Жалоба": st.column_config.TextColumn(width="medium"),
             },
         )
 
     if report is not None:
         with st.container(border=True, key="home-savings-card"):
-            col_a, col_b = st.columns([3, 1])
-            with col_a:
-                st.subheader("Сценарии экономии (расчётные)")
-                for s in report["scenarios"]:
-                    st.write(
-                        f"- до {s['target']}% отходов: экономия в неделю {fmt_money(s['saving_week'])} сом, "
-                        f"за год {fmt_money(s['saving_year'])} сом"
-                    )
-            with col_b:
-                st.caption(
-                    "Потенциальная экономия — расчётный сценарий, а не подтверждённый результат. "
-                    "Используются только тестовые данные."
-                )
+            st.subheader("Сценарии экономии")
+            st.dataframe(
+                [
+                    {
+                        "Цель по отходам": f"до {scenario['target']}%",
+                        "Экономия в неделю": f"{fmt_money(scenario['saving_week'])} сом",
+                        "Экономия за год": f"{fmt_money(scenario['saving_year'])} сом",
+                    }
+                    for scenario in report["scenarios"]
+                ],
+                width="stretch",
+                hide_index=True,
+            )
+            st.caption("Расчёт на модельных данных — это прогноз, а не фактическая экономия.")
 
     with st.expander("О системе"):
         st.success("CLI доступен: python app.py all (через python3 .venv)")
@@ -173,27 +183,24 @@ def _veg_label(item):
     return "—"
 
 
-def page_menu():
-    st.title("Меню на 5 дней")
-    st.caption("Текущее активное меню: сохранённое, сгенерированное AI или встроенное демонстрационное.")
+def page_menu(show_costs=True):
+    st.title("Меню на неделю")
+    st.caption("Блюда по дням, отметки о вегетарианском варианте и себестоимость.")
     menu = get_active_menu()
     costs = get_dish_costs()
     rows = []
-    for m in menu:
-        for letter in ("A", "B"):
-            dish_name = m["dish_a"] if letter == "A" else m["dish_b"]
-            veg = m.get("dish_a_vegetarian") if letter == "A" else m.get("dish_b_vegetarian")
-            cost = costs.get((m["day"], letter))
+    for item in menu:
+        for letter, dish_key, vegetarian_key in (
+            ("A", "dish_a", "dish_a_vegetarian"),
+            ("B", "dish_b", "dish_b_vegetarian"),
+        ):
+            price = costs.get((item["day"], letter))
             rows.append(
                 {
-                    "День": m["day"],
-                    "Блюдо": f"{letter} — {dish_name}",
-                    "Вегетарианское": "Да" if veg else "Нет",
-                    "Жалоба": m["complaint_cluster"],
-                    "Стоимость, сом": "не указано" if cost is None else (
-                        str(int(cost)) if isinstance(cost, (int, float)) and not isinstance(cost, bool) and float(
-                            cost).is_integer() else str(cost)
-                    ),
+                    "День и вариант": f"{item['day']} · {letter}",
+                    "Блюдо": item[dish_key],
+                    "Вегетарианское": "Да" if item.get(vegetarian_key) else "Нет",
+                    "Себестоимость": f"{fmt_money(price)} сом" if show_costs and price is not None else "Не указана",
                 }
             )
     st.dataframe(
@@ -201,41 +208,53 @@ def page_menu():
         width="stretch",
         hide_index=True,
         column_config={
-            "День": st.column_config.TextColumn(width="small"),
+            "День и вариант": st.column_config.TextColumn(width="medium"),
             "Блюдо": st.column_config.TextColumn(width="large"),
             "Вегетарианское": st.column_config.TextColumn(width="small"),
-            "Жалоба": st.column_config.TextColumn(width="medium"),
-            "Стоимость, сом": st.column_config.TextColumn(width="small"),
+            "Себестоимость": st.column_config.TextColumn(width="small"),
         },
     )
+    with st.expander("Пожелания, учтённые в меню"):
+        st.dataframe(
+            [
+                {"День": item["day"], "Пожелание": item.get("complaint_cluster") or "Не указано"}
+                for item in menu
+            ],
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "День": st.column_config.TextColumn(width="small"),
+                "Пожелание": st.column_config.TextColumn(width="large"),
+            },
+        )
     ok, errors = validate_menu(menu)
     if ok:
-        st.success("Структура меню корректна: 5 дней, по 2 блюда, есть вегетарианский вариант.")
+        st.success("Меню прошло проверку: 5 учебных дней, по 2 блюда в каждом.")
     else:
         st.error("; ".join(errors))
 
 
-
 def page_kitchen():
     st.title("Сводка для повара")
-    for flash_key in ("demo_reset_flash", "demo_orders_flash"):
+    for flash_key in ("demo_reset_flash", "demo_orders_flash", "demo_seed_flash"):
         flash = st.session_state.pop(flash_key, None)
         if flash:
             kind, message = flash
             (st.success if kind == "success" else st.error)(message)
 
-    meal_date = st.date_input("Дата сводки", value=date.today(), key="kitchen_date")
-    expected = st.number_input("Ожидаемое число обедающих", min_value=0, value=500, step=10)
+    date_col, expected_col = st.columns(2)
+    meal_date = date_col.date_input("Дата приготовления", value=date.today(), key="kitchen_date")
+    expected = expected_col.number_input("Ожидается обедающих", min_value=0, value=500, step=10)
     hist_mode = st.selectbox(
-        "Распределение не ответивших",
-        ["Неизвестно (не распределять)", "Оценка: все A", "Оценка: все B", "Оценка: поровну"],
+        "Если нет ответа",
+        ["Не распределять", "Считать выбором A", "Считать выбором B", "Разделить поровну"],
         index=0,
     )
     hist_map = {
-        "Неизвестно (не распределять)": None,
-        "Оценка: все A": "A",
-        "Оценка: все B": "B",
-        "Оценка: поровну": "split",
+        "Не распределять": None,
+        "Считать выбором A": "A",
+        "Считать выбором B": "B",
+        "Разделить поровну": "split",
     }
     historical = hist_map[hist_mode]
 
@@ -246,19 +265,40 @@ def page_kitchen():
     summary = kitchen_summary(counts["orders"], expected, veg_letters, historical_shares=None,
                               default_choice=historical)
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Заказов A", summary["a_orders"])
-    c2.metric("Заказов B", summary["b_orders"])
-    c3.metric("Вегетарианских", summary["vegetarian_orders"])
-    c4.metric("Не ответили", summary["unanswered"])
+    st.subheader(f"План приготовления · {day_name or 'выходной'}")
+    menu_for_day = next((item for item in get_active_menu() if item["day"] == day_name), None)
+    if menu_for_day:
+        st.dataframe(
+            [
+                {
+                    "Вариант": letter,
+                    "Блюдо": menu_for_day[dish_key],
+                    "Заказано": summary[count_key],
+                    "Вегетарианское": "Да" if menu_for_day.get(vegetarian_key) else "Нет",
+                }
+                for letter, dish_key, count_key, vegetarian_key in (
+                    ("A", "dish_a", "a_orders", "dish_a_vegetarian"),
+                    ("B", "dish_b", "b_orders", "dish_b_vegetarian"),
+                )
+            ],
+            width="stretch",
+            hide_index=True,
+        )
+    else:
+        st.info("На выбранную дату нет меню учебного дня.")
+
+    c1, c2 = st.columns(2)
+    c1.metric("Выбор A", summary["a_orders"])
+    c2.metric("Выбор B", summary["b_orders"])
+
+    c3, c4 = st.columns(2)
+    c3.metric("Вег. выборы", summary["vegetarian_orders"])
+    c4.metric("Без ответа", summary["unanswered"])
 
     c5, c6, c7 = st.columns(3)
     c5.metric("Базовые порции", summary["base_portions"])
-    c6.metric("Резерв 5%, порций", summary["buffer"])
-    c7.metric("Итого порций", summary["total_portions"])
-
-    if counts["total"] == 0:
-        st.info("Заказов на выбранную дату пока нет. Можно загрузить тестовые данные ниже.")
+    c6.metric("Резерв, порций", summary["buffer"], help="5% от базового числа порций")
+    c7.metric("Всего порций", summary["total_portions"])
 
     st.write(
         f"Распределение по заказам: A — {summary['a_orders']}, B — {summary['b_orders']}. "
@@ -277,8 +317,6 @@ def page_kitchen():
     if summary["total_orders"] == 0:
         st.info("Заказов на дату пока нет. Загрузите тестовые данные ниже или дождитесь предзаказов.")
     with st.expander("Telegram-рассылка (утренняя процедура)"):
-        import os
-
         token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
         if not token:
             st.info("TELEGRAM_BOT_TOKEN не задан: рассылка недоступна.")
@@ -296,9 +334,17 @@ def page_kitchen():
             st.caption("Планировщик: python bot.py schedule (по умолчанию в 09:00).")
 
     with st.expander("Тестовые данные"):
+        st.caption("Набор заменяет только заказы, стоимости и остатки. Сохранённое меню и подписки бота остаются без изменений.")
+        st.button(
+            "Подготовить набор для презентации",
+            type="primary",
+            on_click=_seed_presentation_data,
+            args=(meal_date,),
+            key="seed_presentation_data",
+        )
         if st.button("Загрузить тестовые заказы на выбранную дату"):
             try:
-                with st.spinner("Загрузка..."):
+                with st.spinner("Загрузка…"):
                     seed_demo_orders(date_str)
                 st.session_state["demo_orders_flash"] = ("success", "Тестовые заказы добавлены.")
             except Exception as exc:
@@ -329,7 +375,7 @@ def page_leftovers():
         submitted = st.form_submit_button("Сохранить остатки")
     if submitted:
         try:
-            with st.spinner("Сохранение..."):
+            with st.spinner("Сохранение…"):
                 save_leftover(record_date.isoformat(), waste_mass, int(leftover_portions), note)
             st.success("Запись сохранена.")
         except Exception as exc:
@@ -341,19 +387,19 @@ def page_leftovers():
         st.dataframe(
             [
                 {
-                    "Дата": r["record_date"],
-                    "Отходы, кг": r["waste_mass_kg"],
-                    "Порций осталось": r["leftover_portions"],
-                    "Примечание": r["note"] or "",
+                    "Дата": record["record_date"],
+                    "Отходы, кг": record["waste_mass_kg"],
+                    "Порций осталось": record["leftover_portions"],
+                    "Примечание": record.get("note") or "—",
                 }
-                for r in records
+                for record in records[:20]
             ],
             width="stretch",
             hide_index=True,
             column_config={
                 "Дата": st.column_config.TextColumn(width="small"),
-                "Отходы, кг": st.column_config.NumberColumn(width="small"),
-                "Порций осталось": st.column_config.NumberColumn(width="small"),
+                "Отходы, кг": st.column_config.NumberColumn(width="small", format="%.1f"),
+                "Порций осталось": st.column_config.NumberColumn(width="small", format="%d"),
                 "Примечание": st.column_config.TextColumn(width="large"),
             },
         )
@@ -392,11 +438,10 @@ def page_economics():
             "Потери, сом": st.column_config.TextColumn(width="small"),
         },
     )
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3 = st.columns(3)
     c1.metric("Неделя, сом", fmt_money(report["week_total"]))
     c2.metric("Год (продукты), сом", fmt_money(report["year_waste"]))
     c3.metric("Утилизация за год, сом", fmt_money(report["util_year"]))
-    c4.metric("Сумма категорий, сом", fmt_money(report["combined_losses"]))
 
     st.subheader("Сценарии снижения отходов")
     st.dataframe(
@@ -418,10 +463,36 @@ def page_economics():
     )
     st.info("Сценарии — модельные оценки. Потенциальная экономия не является подтверждённым результатом.")
 
+    measured = get_leftovers()
+    measured_masses = [row["waste_mass_kg"] for row in measured if row["waste_mass_kg"] is not None]
+    st.subheader("Фактические измерения")
+    if measured_masses:
+        average_mass = sum(measured_masses) / len(measured_masses)
+        benchmark = report["assumptions"]["waste_kg_per_day"]
+        difference = average_mass - benchmark
+        actual_1, actual_2, actual_3 = st.columns(3)
+        actual_1.metric("Средние отходы", f"{average_mass:.1f} кг")
+        actual_2.metric(
+            "К базовой оценке",
+            f"{abs(difference):.1f} кг {'выше' if difference > 0 else 'ниже' if difference < 0 else 'без изменений'}",
+        )
+        actual_3.metric("Измерений", len(measured_masses))
+        st.caption(
+            f"Фактическая масса сравнивается с ориентиром кейса {benchmark:.0f} кг/день. "
+            "Денежные сценарии выше остаются модельными, пока не собрана финансовая первичка."
+        )
+        st.dataframe(
+            [{"Дата": row["record_date"], "Отходы, кг": row["waste_mass_kg"], "Осталось порций": row["leftover_portions"]}
+             for row in measured[:20]],
+            width="stretch", hide_index=True,
+        )
+    else:
+        st.info("Пока нет измерений. Внесите массу отходов на странице «Остатки», чтобы начать сравнение.")
+
     with st.expander("Исходные допущения"):
         st.markdown(
-            "- Процент отходов применяется к дневному бюджету закупок 70 000 сом (упрощённое допущение).\n"
-            "- Стоимость потерянных продуктов и утилизация показаны отдельно; автоматическое сложение может привести к двойному учёту.\n"
+            f"- Процент отходов применяется к дневному бюджету закупок {fmt_money(report['assumptions']['budget_per_day'])} сом (упрощённое допущение).\n"
+            "- Стоимость потерянных продуктов и утилизация показаны отдельно, чтобы избежать двойного учёта.\n"
             "- Реальная себестоимость блюд неизвестна; лимит 140 сом/порция проверяется по введённым ценам."
         )
 
@@ -435,7 +506,7 @@ def page_budget():
         (st.success if kind == "success" else st.error)(message)
 
     costs = get_dish_costs()
-    st.subheader("Стоимость блюд (демонстрационный ввод)")
+    st.subheader("Стоимость блюд")
     edited = {}
     for m in get_active_menu():
         for letter in ("A", "B"):
@@ -464,9 +535,8 @@ def page_budget():
     st.caption("Отметьте «известна», чтобы учесть стоимость. Значение 0 может быть валидной ценой.")
     if st.button("Сохранить стоимости", type="primary"):
         try:
-            for (day, letter), (val, known) in edited.items():
-                with st.spinner("Сохранение..."):
-                    save_dish_cost(day, letter, val if known else None)
+            with st.spinner("Сохранение…"):
+                save_dish_costs({key: val if known else None for key, (val, known) in edited.items()})
             st.session_state["costs_flash"] = ("success", "Стоимости сохранены локально.")
         except Exception as exc:
             st.session_state["costs_flash"] = ("error", str(exc))
@@ -531,7 +601,7 @@ def page_ai():
             st.error("Провайдер не настроен: генерация недоступна.")
         else:
             try:
-                with st.spinner("Обращение к языковой модели..."):
+                with st.spinner("Обращение к языковой модели…"):
                     ctx = build_context(get_active_menu())
                     result = generate_menu(ctx)
                 st.session_state["ai_result"] = result
@@ -575,7 +645,7 @@ def page_ai():
                 "Жалоба": st.column_config.TextColumn(width="medium"),
             },
         )
-        ok, errors = validate_ai_menu(result["menu"])
+        ok, errors = validate_ai_menu(result["menu"], costs=get_dish_costs())
         if ok:
             st.success("Структура ответа корректна.")
         else:
@@ -583,7 +653,7 @@ def page_ai():
 
         if result["source"] == "ai" and st.button("Сохранить как текущее меню", type="primary"):
             try:
-                with st.spinner("Сохранение..."):
+                with st.spinner("Сохранение…"):
                     save_menu(result["menu"])
                 st.success("Меню сохранено. Обновите страницу «Меню».")
             except ValueError as exc:
@@ -596,23 +666,62 @@ def page_ai():
                 st.code(result["raw_text"])
 
 
-PAGES = ["Главная", "Меню", "Кухня", "Остатки", "Экономика", "Проверка бюджета", "AI-меню"]
+ROLE_PAGES = {
+    "Управление": ["Главная", "Меню", "Экономика", "Проверка бюджета", "AI-меню"],
+    "Кухня": ["Кухня", "Остатки", "Меню"],
+}
+
+
+def _web_access_allowed():
+    """Optional local gate for a shared staff workstation.
+
+    It stays disabled by default so the prototype remains easy to run locally.
+    A real deployment must set ``CANTEEN_WEB_ACCESS_CODE`` and use HTTPS.
+    """
+    configured_code = os.environ.get("CANTEEN_WEB_ACCESS_CODE", "").strip()
+    if not configured_code:
+        return True
+    if st.session_state.get("web_access_granted"):
+        return True
+    st.title("Вход для сотрудников")
+    st.caption("Этот рабочий кабинет предназначен для кухни и управляющих.")
+    entered_code = st.text_input("Код доступа", type="password")
+    if st.button("Открыть кабинет", type="primary"):
+        if entered_code == configured_code:
+            st.session_state["web_access_granted"] = True
+            st.rerun()
+        st.error("Код доступа не подошёл.")
+    return False
+
+
+def inject_styles():
+    if CUSTOM_CSS:
+        st.markdown(f"<style>{CUSTOM_CSS}</style>", unsafe_allow_html=True)
 
 
 def main():
+    st.set_page_config(page_title="Умная столовая", page_icon="🍽️", layout="wide")
+    inject_styles()
     init_db()
-    if "page" not in st.session_state:
-        qp = st.query_params.get("page")
-        st.session_state["page"] = qp if qp in PAGES else "Главная"
+    if not _web_access_allowed():
+        return
     with st.sidebar:
         st.markdown("### 🍽️ Умная столовая")
-        st.caption("Планирование меню, предзаказ и экономика столовой")
+        if "site_role" not in st.session_state:
+            initial_page = st.session_state.get("page") or st.query_params.get("page")
+            initial_role = next((name for name, role_pages in ROLE_PAGES.items() if initial_page in role_pages), "Управление")
+            st.session_state["site_role"] = initial_role
+        role = st.radio("Рабочий раздел", list(ROLE_PAGES), key="site_role")
+        pages = ROLE_PAGES[role]
+        if "page" not in st.session_state or st.session_state["page"] not in pages:
+            requested = st.query_params.get("page")
+            st.session_state["page"] = requested if requested in pages else pages[0]
         st.divider()
         page = st.session_state.get("page", "Главная")
-        if page not in PAGES:
-            page = "Главная"
+        if page not in pages:
+            page = pages[0]
             st.session_state["page"] = page
-        for item in PAGES:
+        for item in pages:
             if st.button(
                     item,
                     key=f"nav_{item}",
@@ -634,12 +743,16 @@ def main():
         try:
             _cfg = get_ai_config()
             if _cfg["configured"]:
-                st.success(f"AI: {_cfg['provider']}/{_cfg['model']}")
+                st.caption("AI: настроен")
             else:
-                st.warning("AI: не настроен")
+                st.caption("AI: демо-режим")
         except Exception:
-            st.info("AI: статус неизвестен")
+            st.caption("AI: статус неизвестен")
         st.caption("v1.0 · локальный прототип")
+        if os.environ.get("CANTEEN_WEB_ACCESS_CODE", "").strip():
+            st.caption("Доступ ограничен кодом сотрудника")
+        else:
+            st.caption("Локальный режим · разделы не являются правами доступа")
 
     if page == "Главная":
         page_home()

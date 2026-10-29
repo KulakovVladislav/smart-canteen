@@ -146,20 +146,25 @@ class TestTelegramDateValidation(unittest.TestCase):
 
         self.assertEqual(len(get_orders("not-a-date", db_path=self.db)), 0)
 
-    def test_valid_date_saved(self):
+    def test_student_can_save_order_in_telegram(self):
+        from src.telegram_bot import next_school_day
+
+        target = next_school_day().isoformat()
         upd = {
             "callback_query": {
                 "id": "1",
                 "from": {"id": 777},
                 "message": {"chat": {"id": 777}},
-                "data": "order:2026-11-02:A",
+                "data": f"order:{target}:A",
             }
         }
         handle_update(upd, token=None, db_path=self.db)
         from src.storage import get_orders
 
-        orders = [o for o in get_orders("2026-11-02", db_path=self.db) if o["student_code"] == "TG-777"]
+        orders = get_orders(target, db_path=self.db)
         self.assertEqual(len(orders), 1)
+        self.assertEqual(orders[0]["student_code"], "TG-777")
+        self.assertEqual(orders[0]["dish"], "A")
 
 
 class TestInitDbIdempotent(unittest.TestCase):

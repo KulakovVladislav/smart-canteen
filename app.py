@@ -3,6 +3,7 @@
 
 import os
 import sys
+from datetime import date, timedelta
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 if ROOT not in sys.path:
@@ -27,11 +28,13 @@ def _load_dotenv():
     except OSError:
         pass
 
+
 _load_dotenv()
 
-from domain.menu import get_active_menu, check_budget
-from domain.preorder import SAMPLE_PREORDERS, count_preorders, format_summary
+from domain.menu import day_for_date, get_active_menu, check_budget, vegetarian_letters_for_day
+from domain.preorder import format_summary, kitchen_summary
 from domain.economics import print_report
+from repositories.storage import get_dish_costs, get_orders, seed_presentation_data
 
 
 def cmd_menu():
@@ -40,13 +43,39 @@ def cmd_menu():
         print(f"   жалоба: {item['complaint_cluster']}")
 
 
-def cmd_preorder():
-    counts = count_preorders(SAMPLE_PREORDERS)
-    print(format_summary(counts))
+def _next_school_day(today=None):
+    target = (today or date.today()) + timedelta(days=1)
+    while target.weekday() > 4:
+        target += timedelta(days=1)
+    return target
+
+
+def cmd_preorder(meal_date=None):
+    target = meal_date or _next_school_day()
+    orders = get_orders(target.isoformat())
+    day_name = day_for_date(target)
+    vegetarian = vegetarian_letters_for_day(day_name, menu=get_active_menu()) if day_name else []
+    try:
+        expected = max(0, int(os.environ.get("CANTEEN_EXPECTED_DINERS", "500")))
+    except (TypeError, ValueError):
+        expected = 500
+    summary = kitchen_summary(orders, expected, vegetarian)
+    summary["vegetarian"] = summary["vegetarian_orders"]
+    summary["total"] = summary["total_portions"]
+    print("Данные из локальной SQLite-базы.")
+    print(format_summary(summary, date=target.isoformat()))
 
 
 def cmd_budget_check():
-    report = check_budget(menu=get_active_menu())
+    saved = get_dish_costs()
+    menu = get_active_menu()
+    cost_dict = {}
+    for item in menu:
+        cost_dict[item["day"]] = {
+            "A": saved.get((item["day"], "A")),
+            "B": saved.get((item["day"], "B")),
+        }
+    report = check_budget(cost_dict, menu=menu)
     print(report["summary"])
     for it in report["items"]:
         print(f"  {it['day']} / {it['dish']}: {it['cost_display']} сом — {it['status']}")
@@ -66,6 +95,16 @@ def cmd_all():
     print_report()
 
 
+def cmd_demo():
+    """Explicitly create local presentation data for the next school day."""
+    target = _next_school_day()
+    seeded = seed_presentation_data(target.isoformat())
+    print(
+        f"Демонстрационный набор создан на {seeded['meal_date']}: "
+        f"{seeded['orders']} заказов, {seeded['costs']} стоимостей, {seeded['leftovers']} измерения остатков."
+    )
+
+
 def main(argv=None):
     if argv is None:
         argv = sys.argv
@@ -78,8 +117,10 @@ def main(argv=None):
         cmd_budget_check()
     elif cmd == "all":
         cmd_all()
+    elif cmd == "demo":
+        cmd_demo()
     else:
-        print("Usage: python app.py [menu|preorder|budget-check|all]")
+        print("Usage: python app.py [menu|preorder|budget-check|all|demo]")
         return 2
     return 0
 

@@ -80,9 +80,9 @@ class TestResetDemoDataUI(unittest.TestCase):
 
         init_db(self.db)
         save_order("TEST-001", "2026-10-28", "A", db_path=self.db)
-        save_dish_cost("Понедельник", "A", 120, db_path=self.db)
         save_leftover("2026-10-28", 1.5, 2, "тест", db_path=self.db)
         save_menu(_custom_menu(), db_path=self.db)
+        save_dish_cost("Понедельник", "A", 120, db_path=self.db)
 
         self.at = AppTest.from_file(WEB_APP, default_timeout=10)
         self.at.session_state["page"] = "Кухня"

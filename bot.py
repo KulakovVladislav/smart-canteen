@@ -27,13 +27,15 @@ def _load_dotenv():
     except OSError:
         pass
 
+
 _load_dotenv()
 
 from services.telegram_bot import (
-    get_bot_token,
+    bot_status,
     run_bot,
     run_daily_job,
     run_scheduled,
+    sync_commands,
 )
 
 
@@ -50,11 +52,39 @@ def main(argv=None):
               f"сводка отправлена {result['summary_sent']}.")
         return 0
     if cmd == "schedule":
-        hour = int(os.environ.get("CANTEEN_BROADCAST_HOUR", "9"))
-        minute = int(os.environ.get("CANTEEN_BROADCAST_MINUTE", "0"))
+        try:
+            hour = int(os.environ.get("CANTEEN_BROADCAST_HOUR", "9"))
+            minute = int(os.environ.get("CANTEEN_BROADCAST_MINUTE", "0"))
+        except (TypeError, ValueError):
+            print("Неверное значение CANTEEN_BROADCAST_HOUR/MINUTE")
+            return 2
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            print("CANTEEN_BROADCAST_HOUR должен быть 0-23, MINUTE 0-59")
+            return 2
         run_scheduled(broadcast_hour=hour, broadcast_minute=minute)
         return 0
-    print("Usage: python bot.py [run|poll|broadcast|schedule]")
+    if cmd == "check":
+        try:
+            status = bot_status()
+        except Exception as exc:
+            print(f"Проверка не удалась: {exc}")
+            return 1
+        bot = status["bot"] or {}
+        username = bot.get("username")
+        print(f"Бот: {bot.get('first_name', '—')}" + (f" (@{username})" if username else ""))
+        print(f"Администраторы: {status['admins']}")
+        print(f"Подписчики: {status['subscribers']}")
+        return 0
+    if cmd in ("commands", "sync"):
+        try:
+            result = sync_commands()
+        except Exception as exc:
+            print(f"Не удалось обновить команды: {exc}")
+            return 1
+        print(f"Команды обновлены: общее меню — {result['default']}, "
+              f"персонально для сотрудников — {result['admins']}.")
+        return 0
+    print("Usage: python bot.py [run|poll|broadcast|schedule|check|commands]")
     return 2
 
 
