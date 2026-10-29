@@ -12,3 +12,10 @@ secrets.toml
 .idea/
 
 .pytest_cache/
+
+# Local/generated artifacts and internal working files
+.codex-build/
+tmp/
+output/
+docs/PRESENTATION_BRIEF.md
+.kilo/plans/
