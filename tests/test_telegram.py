@@ -309,6 +309,8 @@ class TestRoleMatrix(InteractionTest):
         self.assertEqual(rows[0]["dish"], "B")
         self.assertIn("Выбор изменён", self.last_text())
         self.assert_keyboard_has("nav:myorder")
+        self.assert_keyboard_has(f"cancel:{target.isoformat()}")
+        self.assert_keyboard_has("nav:order")
 
     def test_student_repeated_choice_is_idempotent(self):
         target = self.target_date()
@@ -492,6 +494,45 @@ class TestInteractionBasics(InteractionTest):
         tb.handle_update(None, token=None, db_path=self.db)
 
 
+class TestTextsAndEmptyStates(InteractionTest):
+    def test_student_help_uses_next_school_day_wording(self):
+        self.send(self.message("/help"))
+        text = self.last_text()
+        self.assertIn("ближайший учебный день", text)
+        self.assertNotIn("на завтра", text)
+
+    def test_staff_help_explains_leftover_cancel(self):
+        self.set_admin(9)
+        self.send(self.message("/help", user_id=9))
+        text = self.last_text()
+        self.assertIn("/leftover</code> — пошаговый ввод", text)
+        self.assertIn("/cancel</code> — выйти из ввода остатков", text)
+
+    def test_menu_without_published_menu_has_no_order_buttons(self):
+        with mock.patch.object(tb, "get_active_menu", return_value=[]):
+            self.send(self.message("/menu"))
+
+        self.assertIn("меню ещё не опубликовано", self.last_text())
+        self.assert_keyboard_lacks("order:")
+        self.assert_keyboard_has("nav:order")
+
+    def test_broadcast_without_menu_has_no_order_buttons(self):
+        subscribe_chat("42", db_path=self.db)
+        with mock.patch.object(tb, "get_active_menu", return_value=[]):
+            sent = tb.broadcast_menu("T", meal_date=self.target_date(), db_path=self.db)
+
+        self.assertEqual(sent, 1)
+        self.assertIn("меню ещё не опубликовано", self.last_text())
+        self.assert_keyboard_lacks("order:")
+
+    def test_plural_forms(self):
+        self.assertEqual(tb._plural_ru(1, "порция", "порции", "порций"), "порция")
+        self.assertEqual(tb._plural_ru(2, "порция", "порции", "порций"), "порции")
+        self.assertEqual(tb._plural_ru(5, "порция", "порции", "порций"), "порций")
+        self.assertEqual(tb._plural_ru(11, "порция", "порции", "порций"), "порций")
+        self.assertEqual(tb._plural_ru(21, "порция", "порции", "порций"), "порция")
+
+
 class TestBroadcast(InteractionTest):
     def test_broadcast_marks_existing_choice(self):
         target = self.target_date()
@@ -513,6 +554,82 @@ class TestBroadcast(InteractionTest):
 
     def test_broadcast_without_subscribers(self):
         self.assertEqual(tb.broadcast_menu("T", meal_date=self.target_date(), db_path=self.db), 0)
+
+
+class TestLocalMedia(unittest.TestCase):
+    """Локальные фото: стабильные файлы и multipart-загрузка."""
+
+    def test_all_declared_assets_exist(self):
+        filenames = set(tb._DAY_IMAGE_FILES.values())
+        filenames.update(filename for _, filename in tb._DISH_IMAGE_RULES)
+        filenames.add("welcome.jpg")
+        for filename in filenames:
+            with self.subTest(filename=filename):
+                self.assertTrue(os.path.isfile(tb._asset_path(filename)), filename)
+
+    def test_menu_image_for_each_school_day(self):
+        for offset in range(7):
+            day = date.today() + timedelta(days=offset)
+            with self.subTest(day=day):
+                expected = tb._DAY_IMAGE_FILES.get(tb.day_for_date(day))
+                actual = tb.menu_image_url(day)
+                if expected is None:
+                    self.assertIsNone(actual)
+                else:
+                    self.assertEqual(actual, tb._asset_path(expected))
+
+    def test_dish_image_by_keyword(self):
+        cases = (
+            ("Куриный суп", "soup.jpg"),
+            ("Каша без комков", "porridge.jpg"),
+            ("Школьная пицца", "pizza.jpg"),
+            ("Макароны с сыром", "pasta.jpg"),
+            ("Рыбные наггетсы + рис", "fish-rice.jpg"),
+            ("Рис с овощами", "rice.jpg"),
+            ("Запеканка творожная", "casserole.jpg"),
+            ("Омлет", "eggs.jpg"),
+            ("Овощной салат", "salad.jpg"),
+            ("Гуляш с гречкой", "goulash.jpg"),
+            ("Неизвестное блюдо", "goulash.jpg"),
+        )
+        for name, filename in cases:
+            with self.subTest(name=name):
+                self.assertEqual(tb.dish_image_url(name), tb._asset_path(filename))
+
+    def test_send_photo_uploads_local_file(self):
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return b'{"ok": true, "result": {}}'
+
+        captured = {}
+
+        def fake_urlopen(req, timeout):
+            captured["request"] = req
+            return Response()
+
+        path = tb._asset_path("welcome.jpg")
+        with mock.patch.object(tb.urllib.request, "urlopen", side_effect=fake_urlopen):
+            tb.send_photo("T", 42, path, caption="Меню", reply_markup={"inline_keyboard": []})
+
+        req = captured["request"]
+        self.assertTrue(req.full_url.endswith("/sendPhoto"))
+        self.assertIn("multipart/form-data; boundary=", req.headers["Content-type"])
+        self.assertIn(b'name="photo"; filename="welcome.jpg"', req.data)
+        self.assertIn(b'name="caption"', req.data)
+        self.assertIn("Меню".encode("utf-8"), req.data)
+
+    def test_send_photo_keeps_http_urls_as_urls(self):
+        with mock.patch.object(tb, "api_call") as api_call:
+            tb.send_photo("T", 42, "https://example.test/menu.jpg", caption="Меню")
+
+        api_call.assert_called_once()
+        self.assertEqual(api_call.call_args.args[:2], ("T", "sendPhoto"))
 
 
 class TestMediaFallback(unittest.TestCase):

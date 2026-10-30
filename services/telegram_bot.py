@@ -13,12 +13,14 @@ import html
 import json
 import logging
 import math
+import mimetypes
 import os
 import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from datetime import date, datetime, timedelta
 
 from domain.menu import day_for_date, get_active_menu, vegetarian_letters_for_day
@@ -37,9 +39,34 @@ from repositories.storage import (
 )
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ASSETS_DIR = os.path.join(ROOT, "assets", "bot")
 logger = logging.getLogger(__name__)
 
 WELCOME_IMAGE_URL = os.environ.get("CANTEEN_BOT_IMAGE_URL", "").strip() or None
+
+_DAY_IMAGE_FILES = {
+    "Понедельник": "porridge.jpg",
+    "Вторник": "soup.jpg",
+    "Среда": "fish-rice.jpg",
+    "Четверг": "goulash.jpg",
+    "Пятница": "pizza.jpg",
+}
+
+# Порядок важен: сначала более точные категории, затем общие.
+_DISH_IMAGE_RULES = (
+    (("суп", "борщ", "щи", "уха", "бульон"), "soup.jpg"),
+    (("каша", "овсян", "порридж"), "porridge.jpg"),
+    (("пицца",), "pizza.jpg"),
+    (("макарон", "паста", "спагетти"), "pasta.jpg"),
+    (("рыб", "лосос", "морепродукт"), "fish-rice.jpg"),
+    (("рис", "плов"), "rice.jpg"),
+    (("запекан", "творог", "сырник"), "casserole.jpg"),
+    (("яйц", "омлет"), "eggs.jpg"),
+    (("салат", "винегрет"), "salad.jpg"),
+    (("греч",), "goulash.jpg"),
+    (("овощ", "тушён", "тушен"), "salad.jpg"),
+    (("гуляш", "мясо", "куриц", "котлет", "тефтел", "наггет"), "goulash.jpg"),
+)
 
 _ORDER_DISHES = ("A", "B")
 _WEEKDAYS_RU = (
@@ -136,20 +163,36 @@ def _is_vegetarian(item, dish):
     return bool(item.get(key))
 
 
+def _asset_path(filename):
+    return os.path.join(ASSETS_DIR, filename)
+
+
 def menu_image_url(meal_date, db_path=None):
-    """Optional image from configured menu data; text is the reliable fallback."""
+    """Фото дня из меню или локального набора; None, если фото нет."""
     try:
         item = _menu_item(meal_date, db_path)
         if item and item.get("image_url"):
             return str(item["image_url"])
     except Exception:
         pass
-    return None
+    parsed = _coerce_date(meal_date)
+    day_name = day_for_date(parsed) if parsed else None
+    filename = _DAY_IMAGE_FILES.get(day_name)
+    if not filename:
+        return None
+    path = _asset_path(filename)
+    return path if os.path.isfile(path) else None
 
 
 def dish_image_url(dish_name):
-    """Reserved for a future managed media store; never uses a third-party URL."""
-    return None
+    """Локальное фото блюда по ключевым словам; без внешних URL."""
+    name = str(dish_name or "").strip().lower()
+    for keywords, filename in _DISH_IMAGE_RULES:
+        if any(keyword in name for keyword in keywords):
+            path = _asset_path(filename)
+            return path if os.path.isfile(path) else None
+    path = _asset_path("goulash.jpg")
+    return path if os.path.isfile(path) else None
 
 
 # ---------------------------------------------------------------------------
@@ -203,22 +246,74 @@ def _flatten(payload, prefix=""):
     return result
 
 
-def api_call(token, method, payload=None, timeout=30):
-    url = _api_url(token, method)
-    if payload is None:
-        payload = {}
-    data = urllib.parse.urlencode(_flatten(payload)).encode("utf-8")
-    req = urllib.request.Request(url, data=data, method="POST")
+def _read_api_response(req, timeout):
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
         raw = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"Telegram API error {exc.code}: {raw}") from exc
-    parsed = json.loads(raw)
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Telegram API returned invalid JSON: {raw[:200]}") from exc
     if not parsed.get("ok"):
         raise RuntimeError(f"Telegram API not ok: {parsed}")
     return parsed.get("result")
+
+
+def api_call(token, method, payload=None, timeout=30):
+    url = _api_url(token, method)
+    if payload is None:
+        payload = {}
+    data = urllib.parse.urlencode(_flatten(payload)).encode("utf-8")
+    req = urllib.request.Request(url, data=data, method="POST")
+    return _read_api_response(req, timeout)
+
+
+def _api_call_multipart(token, method, payload, file_field, file_path, timeout=30):
+    """Отправить локальный файл в Telegram через multipart/form-data."""
+    boundary = f"----SmartCanteen{uuid.uuid4().hex}"
+    body = bytearray()
+    for key, value in _flatten(payload).items():
+        if key == file_field or value is None:
+            continue
+        body.extend(f"--{boundary}\r\n".encode("utf-8"))
+        body.extend(f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode("utf-8"))
+        body.extend(str(value).encode("utf-8"))
+        body.extend(b"\r\n")
+
+    filename = os.path.basename(file_path).replace('"', "")
+    mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    body.extend(f"--{boundary}\r\n".encode("utf-8"))
+    body.extend(
+        f'Content-Disposition: form-data; name="{file_field}"; filename="{filename}"\r\n'.encode("utf-8")
+    )
+    body.extend(f"Content-Type: {mime_type}\r\n\r\n".encode("utf-8"))
+    with open(file_path, "rb") as handle:
+        body.extend(handle.read())
+    body.extend(b"\r\n")
+    body.extend(f"--{boundary}--\r\n".encode("utf-8"))
+
+    req = urllib.request.Request(
+        _api_url(token, method),
+        data=bytes(body),
+        method="POST",
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+    )
+    return _read_api_response(req, timeout)
+
+
+def _local_photo_path(photo):
+    if not photo:
+        return None
+    try:
+        value = os.fspath(photo)
+    except TypeError:
+        return None
+    if not isinstance(value, str) or value.startswith(("http://", "https://")):
+        return None
+    return value if os.path.isfile(value) else None
 
 
 def send_message(token, chat_id, text, reply_markup=None, parse_mode="HTML", timeout=30):
@@ -239,6 +334,10 @@ def send_photo(token, chat_id, photo, caption=None, reply_markup=None, parse_mod
         payload["reply_markup"] = reply_markup if isinstance(reply_markup, str) else json.dumps(
             reply_markup, ensure_ascii=False
         )
+    local_path = _local_photo_path(photo)
+    if local_path:
+        fields = {key: value for key, value in payload.items() if key != "photo"}
+        return _api_call_multipart(token, "sendPhoto", fields, "photo", local_path, timeout=timeout)
     return api_call(token, "sendPhoto", payload, timeout=timeout)
 
 
@@ -296,6 +395,19 @@ def _short(text, limit=24):
     if len(text) <= limit:
         return text
     return text[: limit - 1].rstrip() + "…"
+
+
+def _plural_ru(value, one, few, many):
+    """Русская форма слова для целого числа."""
+    try:
+        number = abs(int(value))
+    except (TypeError, ValueError):
+        return many
+    if number % 10 == 1 and number % 100 != 11:
+        return one
+    if 2 <= number % 10 <= 4 and not 12 <= number % 100 <= 14:
+        return few
+    return many
 
 
 def _home_button():
@@ -374,9 +486,13 @@ def _order_actions_keyboard(iso):
     }
 
 
-def _order_confirmation_keyboard():
+def _order_confirmation_keyboard(iso):
     return {
         "inline_keyboard": [
+            [
+                {"text": "🔄 Изменить блюдо", "callback_data": "nav:order"},
+                {"text": "❌ Отменить заказ", "callback_data": f"cancel:{iso}"},
+            ],
             [
                 {"text": "🧾 Мой заказ", "callback_data": "nav:myorder"},
                 {"text": "📋 Меню", "callback_data": "nav:menu"},
@@ -509,7 +625,8 @@ def _main_menu_caption(is_admin_user, user_id=None, db_path=None):
     if order:
         dish = str(order["dish"]).upper()
         item = _menu_item(target, db_path)
-        status = f"✅ Ваш заказ на {html.escape(target_label)}: <b>{dish}</b> — {html.escape(_dish_name(item, dish))}."
+        dish_name = html.escape(_dish_name(item, dish)) if item else "меню обновляется"
+        status = f"✅ Ваш заказ на {html.escape(target_label)}: <b>{dish}</b> — {dish_name}."
     else:
         status = f"🛒 Заказ на {html.escape(target_label)} ещё не оформлен."
     return (
@@ -520,7 +637,12 @@ def _main_menu_caption(is_admin_user, user_id=None, db_path=None):
 
 
 def _welcome_image(db_path=None):
-    return WELCOME_IMAGE_URL or menu_image_url(next_school_day(), db_path=db_path)
+    if WELCOME_IMAGE_URL:
+        return WELCOME_IMAGE_URL
+    path = _asset_path("welcome.jpg")
+    if os.path.isfile(path):
+        return path
+    return menu_image_url(next_school_day(), db_path=db_path)
 
 
 def _send_main_menu(chat_id, token, db_path=None, user_id=None, welcome=False):
@@ -534,19 +656,21 @@ def _send_main_menu(chat_id, token, db_path=None, user_id=None, welcome=False):
         )
         caption = intro + caption
     keyboard = build_main_keyboard(admin)
-    photo = _welcome_image(db_path) if welcome else menu_image_url(next_school_day(), db_path=db_path)
-    _send_photo_or_text(token, chat_id, photo, caption, keyboard)
+    _send_photo_or_text(token, chat_id, _welcome_image(db_path), caption, keyboard)
 
 
 def _send_menu_view(chat_id, token, user_id, db_path=None):
     admin = is_admin(user_id)
     target = next_school_day()
+    item = _menu_item(target, db_path)
     order = None if admin else _student_order(user_id, target, db_path=db_path)
     current = str(order["dish"]).upper() if order else None
     caption = menu_text_for_date(target, db_path=db_path, is_admin_user=admin, current_dish=current)
     if admin:
         caption += "\n\n👀 Режим сотрудника: только просмотр."
         keyboard = build_readonly_menu_keyboard(True)
+    elif item is None:
+        keyboard = build_main_keyboard(False)
     else:
         keyboard = build_order_keyboard(target, db_path=db_path, current_dish=current)
     _send_photo_or_text(token, chat_id, menu_image_url(target, db_path=db_path), caption, keyboard)
@@ -601,8 +725,8 @@ def _send_my_order_view(chat_id, token, user_id, db_path=None):
 
     dish = str(order["dish"]).upper()
     item = _menu_item(target, db_path)
-    dish_name = html.escape(_dish_name(item, dish))
-    veg = " 🌱 вегетарианское" if _is_vegetarian(item, dish) else ""
+    dish_name = html.escape(_dish_name(item, dish)) if item else "меню обновляется"
+    veg = " 🌱 вегетарианское" if item and _is_vegetarian(item, dish) else ""
     _reply(
         token,
         chat_id,
@@ -736,7 +860,7 @@ def _save_student_order(chat_id, token, user_id, meal_date, dish, db_path=None):
         "Можно изменить выбор, пока не наступил день обеда."
     )
     photo = item.get("image_url") or dish_image_url(name)
-    _send_photo_or_text(token, chat_id, photo, caption, _order_confirmation_keyboard())
+    _send_photo_or_text(token, chat_id, photo, caption, _order_confirmation_keyboard(parsed.isoformat()))
 
 
 # ---------------------------------------------------------------------------
@@ -824,7 +948,11 @@ def _send_leftovers_view(chat_id, token, db_path=None):
             mass = row.get("waste_mass_kg")
             portions = row.get("leftover_portions")
             mass_text = f"{mass:g} кг" if isinstance(mass, (int, float)) else "—"
-            portions_text = f"{portions} порц." if portions is not None else "—"
+            portions_text = (
+                f"{portions} {_plural_ru(portions, 'порция', 'порции', 'порций')}"
+                if portions is not None
+                else "—"
+            )
             lines.append(
                 f"• <b>{html.escape(format_date_human(row.get('record_date')))}</b>: "
                 f"{mass_text}, {portions_text}"
@@ -857,15 +985,18 @@ def _help_text(is_admin_user):
             "Команды:\n"
             "<code>/summary</code> — сводка на сегодня\n"
             "<code>/summary 2026-11-02</code> — сводка на дату\n"
-            "<code>/leftover 1.5 2 примечание</code> — сохранить остатки\n\n"
+            "<code>/leftover</code> — пошаговый ввод остатков\n"
+            "<code>/leftover 1.5 2 примечание</code> — сохранить одной строкой\n"
+            "<code>/cancel</code> — выйти из ввода остатков\n\n"
             "Предзаказ ученики оформляют в этом Telegram-боте."
         )
     return (
         "ℹ️ <b>Как оформить предзаказ</b>\n\n"
-        "🛒 <b>Заказать обед</b> — выберите вариант A или B на ближайший учебный день\n"
+        "🛒 <b>Заказать обед</b> — выберите блюдо A или B на ближайший учебный день\n"
         "🧾 <b>Мой заказ</b> — проверьте, измените или отмените выбор\n"
-        "📋 <b>Меню</b> — посмотрите блюда на завтра\n\n"
+        "📋 <b>Меню</b> — посмотрите блюда на ближайший учебный день\n\n"
         "Команды:\n"
+        "<code>/menu</code> — открыть меню\n"
         "<code>/order</code> — выбрать блюдо\n"
         "<code>/myorder</code> — посмотреть заказ\n"
         "<code>/cancel</code> — отменить заказ\n"
@@ -1307,6 +1438,8 @@ def broadcast_menu(token, meal_date=None, db_path=None):
             if admin:
                 text += "\n\n👀 Режим сотрудника: только просмотр."
                 keyboard = build_readonly_menu_keyboard(True)
+            elif _menu_item(parsed, db_path) is None:
+                keyboard = build_main_keyboard(False)
             else:
                 keyboard = build_order_keyboard(parsed, db_path=db_path, current_dish=current)
             _send_photo_or_text(token, cid, menu_image_url(parsed, db_path=db_path), text, keyboard)
