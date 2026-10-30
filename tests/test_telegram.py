@@ -6,7 +6,7 @@ import os
 import sys
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, timedelta
 from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -192,6 +192,155 @@ class TestRoles(InteractionTest):
         self.assertNotIn("order", staff)
 
 
+class TestRoleMatrix(InteractionTest):
+    """Ученик и кухня не должны пересекаться в действиях."""
+
+    def test_student_cannot_open_staff_callbacks(self):
+        cases = (
+            ("nav:summary", "Сводка для кухни доступна только сотрудникам"),
+            ("nav:leftover", "Остатки вносят только сотрудники кухни"),
+            ("nav:leftovers", "История остатков доступна только сотрудникам"),
+        )
+        for data, expected in cases:
+            with self.subTest(data=data):
+                self.sent.clear()
+                self.send(self.callback(data))
+                self.assertIn(expected, self.last_text())
+                self.assert_keyboard_has("nav:order")
+                self.assert_keyboard_lacks("nav:summary")
+                self.assert_keyboard_lacks("nav:leftover")
+                self.assertFalse(tb._leftover_is_pending(5))
+
+    def test_student_cannot_use_staff_commands(self):
+        for command in ("/summary", "/summary 2026-11-02", "/leftover", "/leftover 1 2"):
+            with self.subTest(command=command):
+                self.sent.clear()
+                self.send(self.message(command))
+                text = self.last_text()
+                self.assertIn("🔒", text)
+                self.assertNotIn("Заказов A", text)
+                self.assertEqual(get_leftovers(db_path=self.db), [])
+
+    def test_staff_cannot_order_via_commands(self):
+        self.set_admin(9)
+        for command in ("/order", "/myorder"):
+            with self.subTest(command=command):
+                self.sent.clear()
+                self.send(self.message(command, user_id=9))
+                self.assertIn("Предзаказ доступен ученикам", self.last_text())
+                self.assert_keyboard_has("nav:summary")
+                self.assert_keyboard_lacks("nav:order")
+                self.assertEqual(get_orders(db_path=self.db), [])
+
+    def test_staff_cannot_open_student_callbacks(self):
+        self.set_admin(9)
+        for data in ("nav:order", "nav:myorder"):
+            with self.subTest(data=data):
+                self.sent.clear()
+                self.send(self.callback(data, user_id=9))
+                self.assertIn("Предзаказ доступен ученикам", self.last_text())
+                self.assert_keyboard_has("nav:summary")
+                self.assert_keyboard_lacks("nav:order")
+
+    def test_staff_cancel_without_leftover_mode_does_not_touch_orders(self):
+        self.set_admin(9)
+        target = self.target_date()
+        save_order("TG-9", target.isoformat(), "A", db_path=self.db)
+
+        self.send(self.message("/cancel", user_id=9))
+        self.assertIn("Нет активного действия", self.last_text())
+        self.assertEqual(len(get_orders(target.isoformat(), db_path=self.db)), 1)
+
+    def test_student_cannot_cancel_leftover_mode(self):
+        self.send(self.callback("leftover:cancel"))
+        self.assertIn("только сотрудникам", self.last_text())
+        self.assertFalse(tb._leftover_is_pending(5))
+
+    def test_staff_cannot_change_or_cancel_order_via_callbacks(self):
+        self.set_admin(9)
+        target = self.target_date()
+        save_order("TG-9", target.isoformat(), "A", db_path=self.db)
+
+        self.send(self.callback(f"order:{target.isoformat()}:B", user_id=9))
+        self.assertIn("Предзаказ доступен ученикам", self.last_text())
+        rows = get_orders(target.isoformat(), db_path=self.db)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["dish"], "A")
+
+        self.send(self.callback(f"cancel:{target.isoformat()}", user_id=9))
+        self.assertIn("Предзаказ доступен ученикам", self.last_text())
+        self.assertEqual(len(get_orders(target.isoformat(), db_path=self.db)), 1)
+
+    def test_student_can_cancel_only_own_order(self):
+        target = self.target_date()
+        save_order("TG-6", target.isoformat(), "A", db_path=self.db)
+
+        self.send(self.callback(f"cancel:{target.isoformat()}", user_id=5))
+        rows = get_orders(target.isoformat(), db_path=self.db)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["student_code"], "TG-6")
+
+    def test_student_can_cancel_current_order(self):
+        target = self.target_date()
+        save_order("TG-5", target.isoformat(), "A", db_path=self.db)
+
+        self.send(self.callback(f"cancel:{target.isoformat()}"))
+        self.assertEqual(get_orders(target.isoformat(), db_path=self.db), [])
+        self.assertIn("отменён", self.last_text())
+        self.assert_keyboard_has(f"order:{target.isoformat()}:A")
+
+    def test_student_cannot_cancel_stale_order(self):
+        target = self.target_date()
+        stale = (target + timedelta(days=7)).isoformat()
+        save_order("TG-5", stale, "A", db_path=self.db)
+
+        self.send(self.callback(f"cancel:{stale}"))
+        self.assertEqual(len(get_orders(stale, db_path=self.db)), 1)
+        self.assertIn("уже неактуален", self.last_text())
+        self.assert_keyboard_has(f"order:{target.isoformat()}:A")
+
+    def test_student_can_change_order_without_cancel(self):
+        target = self.target_date()
+        save_order("TG-5", target.isoformat(), "A", db_path=self.db)
+
+        self.send(self.callback(f"order:{target.isoformat()}:B"))
+        rows = get_orders(target.isoformat(), db_path=self.db)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["dish"], "B")
+        self.assertIn("Выбор изменён", self.last_text())
+        self.assert_keyboard_has("nav:myorder")
+
+    def test_student_repeated_choice_is_idempotent(self):
+        target = self.target_date()
+        save_order("TG-5", target.isoformat(), "A", db_path=self.db)
+
+        self.send(self.callback(f"order:{target.isoformat()}:A"))
+        rows = get_orders(target.isoformat(), db_path=self.db)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["dish"], "A")
+        self.assertIn("уже выбрано", self.last_text())
+
+    def test_student_stale_order_callback_gets_fresh_keyboard(self):
+        target = self.target_date()
+        stale = (target + timedelta(days=7)).isoformat()
+
+        self.send(self.callback(f"order:{stale}:A"))
+        self.assertEqual(get_orders(db_path=self.db), [])
+        self.assertIn("уже неактуально", self.last_text())
+        self.assert_keyboard_has(f"order:{target.isoformat()}:A")
+        self.assert_keyboard_has(f"order:{target.isoformat()}:B")
+
+    def test_invalid_dish_is_rejected(self):
+        target = self.target_date()
+        self.send(self.callback(f"order:{target.isoformat()}:C"))
+        self.assertEqual(get_orders(db_path=self.db), [])
+        self.assertIn("Некорректный выбор", self.last_text())
+
+    def test_denied_callback_is_still_answered(self):
+        self.send(self.callback("nav:summary"))
+        self.assertEqual(self.answers[-1]["id"], "cb-1")
+
+
 class TestStaffKitchen(InteractionTest):
     def test_staff_menu_is_readonly(self):
         self.set_admin(9)
@@ -364,6 +513,48 @@ class TestBroadcast(InteractionTest):
 
     def test_broadcast_without_subscribers(self):
         self.assertEqual(tb.broadcast_menu("T", meal_date=self.target_date(), db_path=self.db), 0)
+
+
+class TestMediaFallback(unittest.TestCase):
+    """Медиа-слой не должен мешать текстовому сценарию."""
+
+    def setUp(self):
+        self.keyboard = {"inline_keyboard": [[{"text": "🏠 Главное меню", "callback_data": "nav:home"}]]}
+
+    def test_without_photo_sends_text_only(self):
+        with mock.patch.object(tb, "send_photo") as send_photo, \
+                mock.patch.object(tb, "send_message") as send_message:
+            tb._send_photo_or_text("T", 42, None, "Текст меню", self.keyboard)
+
+        send_photo.assert_not_called()
+        send_message.assert_called_once()
+        args, kwargs = send_message.call_args
+        self.assertEqual(args[:3], ("T", 42, "Текст меню"))
+        self.assertEqual(kwargs["reply_markup"], self.keyboard)
+
+    def test_photo_is_sent_when_url_is_present(self):
+        with mock.patch.object(tb, "send_photo") as send_photo, \
+                mock.patch.object(tb, "send_message") as send_message:
+            tb._send_photo_or_text("T", 42, "https://example.test/menu.jpg", "Текст меню", self.keyboard)
+
+        send_message.assert_not_called()
+        send_photo.assert_called_once()
+        args, kwargs = send_photo.call_args
+        self.assertEqual(args[:3], ("T", 42, "https://example.test/menu.jpg"))
+        self.assertEqual(kwargs["caption"], "Текст меню")
+        self.assertEqual(kwargs["reply_markup"], self.keyboard)
+
+    def test_photo_failure_falls_back_to_text(self):
+        with mock.patch.object(tb, "send_photo", side_effect=RuntimeError("telegram down")), \
+                mock.patch.object(tb, "send_message") as send_message, \
+                self.assertLogs(tb.logger, level="WARNING") as logs:
+            tb._send_photo_or_text("T", 42, "https://example.test/menu.jpg", "Текст меню", self.keyboard)
+
+        send_message.assert_called_once()
+        args, kwargs = send_message.call_args
+        self.assertEqual(args[:3], ("T", 42, "Текст меню"))
+        self.assertEqual(kwargs["reply_markup"], self.keyboard)
+        self.assertIn("falling back to text", logs.output[0])
 
 
 if __name__ == "__main__":

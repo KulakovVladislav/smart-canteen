@@ -277,12 +277,13 @@ def _reply_photo(token, chat_id, photo, caption=None, reply_markup=None):
 
 
 def _send_photo_or_text(token, chat_id, photo, caption, keyboard):
-    """Отправить фото с подписью; при сбое — обычный текст."""
+    """Отправить фото с подписью; без фото или при сбое — обычный текст."""
     if not photo:
         return _reply(token, chat_id, caption, reply_markup=keyboard)
     try:
         return _reply_photo(token, chat_id, photo, caption=caption, reply_markup=keyboard)
-    except Exception:
+    except Exception as exc:
+        logger.warning("Photo send failed, falling back to text: %s", exc)
         return _reply(token, chat_id, caption, reply_markup=keyboard)
 
 
@@ -619,7 +620,23 @@ def _cancel_student_order(chat_id, token, user_id, meal_date, db_path=None):
     if user_id is None:
         _reply(token, chat_id, "⚠️ Не удалось определить пользователя. Нажмите /start.")
         return
-    iso = _iso_date(meal_date)
+    parsed = _coerce_date(meal_date)
+    if parsed is None:
+        _reply(token, chat_id, "⚠️ Неверный формат даты. Используйте YYYY-MM-DD.")
+        return
+    if not _is_current_order_date(parsed):
+        target = next_school_day()
+        _reply(
+            token,
+            chat_id,
+            (
+                "ℹ️ <b>Этот заказ уже неактуален.</b>\n\n"
+                f"Сейчас можно заказать на {html.escape(format_date_human(target, accusative=True))}."
+            ),
+            reply_markup=build_order_keyboard(target, db_path=db_path),
+        )
+        return
+    iso = parsed.isoformat()
     try:
         deleted = delete_order(_order_code(user_id), iso, db_path=db_path)
     except Exception as exc:
@@ -632,14 +649,13 @@ def _cancel_student_order(chat_id, token, user_id, meal_date, db_path=None):
         )
         return
 
-    parsed = _coerce_date(meal_date)
-    label = html.escape(format_date_human(parsed, accusative=True)) if parsed else html.escape(iso)
+    label = html.escape(format_date_human(parsed, accusative=True))
     if deleted:
         caption = (
             f"❌ <b>Заказ на {label} отменён.</b>\n\n"
             "Можно сразу выбрать другое блюдо:"
         )
-        keyboard = build_order_keyboard(meal_date, db_path=db_path)
+        keyboard = build_order_keyboard(parsed, db_path=db_path)
     else:
         caption = f"ℹ️ Заказа на {label} не было."
         keyboard = build_main_keyboard(False)
